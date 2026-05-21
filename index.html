@@ -1,0 +1,187 @@
+                    // Формируем финальный HTML-контейнер для облачка сообщения
+                    const bubbleClass = isMyMsg ? 'outgoing' : 'incoming';
+                    chat.innerHTML += `
+                        <div class="msg-bubble ${bubbleClass}">
+                            ${!isMyMsg ? `<div class="msg-author">${escapeHTML(m.sender)}${badge}</div>` : ''}
+                            <div>${escapeHTML(m.text)}${statusCheck}</div>
+                            ${actionsHtml}
+                        </div>`;
+                });
+                chat.scrollTop = chat.scrollHeight;
+            } catch(e){}
+        }
+
+        // Переопределяем базовый URL для работы с вашим хостингом на Render
+        const BACKEND_URL = 'https://onrender.com';
+
+        // Модифицированная регистрация с проверкой повтора пароля
+        async function actionRegister() {
+            const name = document.getElementById('reg-username').value.trim();
+            const pass = document.getElementById('reg-password').value.trim();
+            const passConfirm = document.getElementById('reg-password-confirm').value.trim();
+            
+            if(!name || !pass || !passConfirm) return alert("Заполните все поля!");
+            if(pass !== passConfirm) return alert("Пароли не совпадают!");
+            
+            const randID = generateTenDigitID();
+            const today = new Date().toLocaleDateString('ru-RU');
+
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: randID, name, pass, created_at: today })
+                });
+                const data = await res.json();
+                if (!res.ok) return alert(data.error);
+
+                sessionStorage.setItem('ink_current_user', JSON.stringify(data.user));
+                uiSyncUserLabel();
+                showPushNotification(`Аккаунт создан! ID: ${randID}`);
+                switchWindow('win-messages');
+                uiUpdateChatSelection();
+            } catch (err) { alert("Ошибка сервера"); }
+        }
+
+        // Объединение выбранных друзей из чекбоксов в приватную группу
+        async function actionCreateGroup() {
+            const gName = document.getElementById('new-group-name').value.trim();
+            let currentUser = getCurrentUser();
+            if (!gName) return alert("Введите название группы!");
+
+            const checkboxes = document.querySelectorAll('.group-member-checkbox:checked');
+            let members = Array.from(checkboxes).map(cb => cb.value);
+
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/groups/create`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ gName, creator: currentUser.name, members })
+                });
+                const data = await res.json();
+                if (!res.ok) return alert(data.error);
+
+                showPushNotification(`Группа "${gName}" успешно создана!`);
+                document.getElementById('new-group-name').value = '';
+                switchWindow('win-messages');
+                uiUpdateChatSelection();
+            } catch (err) { alert("Ошибка создания группы"); }
+        }
+
+        // Отрисовка списка чекбоксов друзей для создания приватной группы
+        function uiRenderGroupCreationList() {
+            const container = document.getElementById('group-friends-checkboxes');
+            if (!container) return;
+            container.innerHTML = '';
+            let myFriends = getMyFriends();
+
+            if (myFriends.length === 0) {
+                container.innerHTML = '<div style="font-size:12px; color:var(--tg-text-muted); padding:5px;">У вас нет друзей для добавления</div>';
+                return;
+            }
+
+            myFriends.forEach(f => {
+                container.innerHTML += `
+                    <label class="checkbox-item">
+                        <input type="checkbox" class="group-member-checkbox" value="${f.name}">
+                        <span>${f.name}</span>
+                    </label>
+                `;
+            });
+        }
+
+        // Сохранение отредактированного профиля (Имя и Пароль)
+        async function actionSaveProfile() {
+            let currentUser = getCurrentUser();
+            const newName = document.getElementById('edit-profile-name').value.trim();
+            const newPass = document.getElementById('edit-profile-password').value.trim();
+
+            if (!newName || !newPass) return alert("Поля не могут быть пустыми!");
+
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/profile/update`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: currentUser.id, newName, newPass })
+                });
+                const data = await res.json();
+                if (!res.ok) return alert(data.error);
+
+                sessionStorage.setItem('ink_current_user', JSON.stringify(data.user));
+                uiSyncUserLabel();
+                uiUpdateProfile();
+                showPushNotification("Данные успешно сохранены!");
+            } catch (err) { alert("Ошибка обновления профиля"); }
+        }
+
+        // Переключение видимости символов пароля при регистрации ("Показать код")
+        function toggleRegisterPassword() {
+            const passInput = document.getElementById('reg-password');
+            const confirmInput = document.getElementById('reg-password-confirm');
+            const btn = document.getElementById('btn-toggle-reg-pass');
+            
+            if (passInput.type === 'password') {
+                passInput.type = 'text';
+                if(confirmInput) confirmInput.type = 'text';
+                btn.innerText = '👁️ Скрыть код';
+            } else {
+                passInput.type = 'password';
+                if(confirmInput) confirmInput.type = 'password';
+                btn.innerText = '👁️ Показать код';
+            }
+        }
+
+        // Поддержание активности «В сети» и автообновление сообщений каждые 3 секунды
+        function startHeartbeat() {
+            setInterval(async () => {
+                let currentUser = getCurrentUser();
+                if (!currentUser) return;
+                try {
+                    await fetch(`${BACKEND_URL}/api/heartbeat`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username: currentUser.name })
+                    });
+                } catch (e) {}
+            }, 5000);
+        }
+
+        function startAutoRefresh() {
+            setInterval(async () => {
+                let currentUser = getCurrentUser();
+                if (!currentUser) return;
+                const activeWin = document.querySelector('.window-box.active');
+                if (activeWin && activeWin.id === 'win-messages') {
+                    await uiUpdateMessages();
+                }
+            }, 3000);
+        }
+
+        // Инициализация фоновых процессов
+        startHeartbeat();
+        startAutoRefresh();
+        uiSyncUserLabel();
+        uiUpdateNotifyBadge();
+        uiUpdateChatSelection();
+    </script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const themeToggleBtn = document.getElementById('theme-toggle');
+            if (!themeToggleBtn) return;
+
+            const savedTheme = localStorage.getItem('ink_theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            themeToggleBtn.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+
+            themeToggleBtn.addEventListener('click', () => {
+                const currentTheme = document.documentElement.getAttribute('data-theme');
+                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                document.documentElement.setAttribute('data-theme', newTheme);
+                localStorage.setItem('ink_theme', newTheme);
+                themeToggleBtn.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+            });
+        });
+    </script>
+</body>
+</html>
