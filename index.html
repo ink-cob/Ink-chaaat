@@ -4,537 +4,384 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ink chat</title>
+    <script src="/socket.io/socket.io.js"></script>
     <style>
         :root {
-            --tg-bg: #ffffff;
-            --tg-sidebar-bg: #ffffff;
-            --tg-active-item: #2f8ccd;
-            --tg-text: #000000;
-            --tg-text-muted: #707579;
-            --tg-border: #dfdfdf;
-            --tg-btn-hover: #f4f4f5;
-            --tg-chat-bg: #f4f4f5;
-            --tg-my-msg: #eeffde;
-            --tg-other-msg: #ffffff;
-            --tg-danger: #e53935;
+            --bg: #0e1621; --sidebar: #17212b; --text: #f5f5f5;
+            --active: #24303f; --primary: #2b5278; --msg-in: #182533; --msg-out: #2b5278;
         }
-        :root[data-theme="dark"] {
-            --tg-bg: #182533;
-            --tg-sidebar-bg: #17212b;
-            --tg-active-item: #5288c1;
-            --tg-text: #f5f5f5;
-            --tg-text-muted: #7f91a4;
-            --tg-border: #101921;
-            --tg-btn-hover: #202b36;
-            --tg-chat-bg: #0e1621;
-            --tg-my-msg: #2b5278;
-            --tg-other-msg: #182533;
-            --tg-danger: #ec3942;
+        [data-theme="light"] {
+            --bg: #e7ebf0; --sidebar: #ffffff; --text: #000000;
+            --active: #f4f4f5; --primary: #3390ec; --msg-in: #ffffff; --msg-out: #eeffde;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
-        body { display: flex; height: 100vh; background: var(--tg-bg); color: var(--tg-text); overflow: hidden; position: relative; }
-        #mobile-menu-toggle { display: none; position: absolute; top: 12px; left: 12px; z-index: 100; background: var(--tg-active-item); color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; }
-        #left-menu { width: 320px; min-width: 320px; background: var(--tg-sidebar-bg); border-right: 1px solid var(--tg-border); display: flex; flex-direction: column; z-index: 10; }
-        .sidebar-header { padding: 16px; border-bottom: 1px solid var(--tg-border); }
-        .sidebar-header h2 { font-size: 20px; color: var(--tg-active-item); margin-bottom: 4px; }
-        .user-badge { font-size: 13px; color: var(--tg-text-muted); }
-        .theme-toggle-btn { background: none; border: none; font-size: 20px; cursor: pointer; padding: 4px 8px; border-radius: 5px; }
-        .menu-scroll { flex: 1; overflow-y: auto; padding: 8px 0; }
-        .menu-section-title { font-size: 12px; font-weight: bold; text-transform: uppercase; color: var(--tg-active-item); padding: 12px 20px 6px 20px; }
-        .menu-btn { width: 100%; padding: 12px 20px; border: none; background: transparent; color: var(--tg-text); cursor: pointer; text-align: left; font-size: 14px; display: flex; align-items: center; justify-content: space-between; }
-        .menu-btn:hover { background: var(--tg-btn-hover); }
-        .menu-btn.active-tab { background: var(--tg-btn-hover); color: var(--tg-active-item); border-left: 3px solid var(--tg-active-item); }
-        #workspace { flex: 1; background: var(--tg-chat-bg); display: flex; justify-content: center; align-items: center; padding: 20px; width: 100%; }
-        .window-box { background: var(--tg-bg); padding: 32px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); width: 100%; max-width: 460px; display: none; max-height: 90vh; overflow-y: auto; }
-        .window-box.active { display: block; }
-        .input-group { margin-bottom: 14px; }
-        .input-group label { display: block; font-size: 12px; color: var(--tg-text-muted); margin-bottom: 4px; }
-        input, select { width: 100%; padding: 11px 16px; border: 1px solid var(--tg-border); border-radius: 8px; font-size: 14px; background: var(--tg-sidebar-bg); color: var(--tg-text); outline: none; }
-        .checkbox-group-box { max-height: 120px; overflow-y: auto; border: 1px solid var(--tg-border); border-radius: 8px; padding: 10px; background: var(--tg-chat-bg); }
-        .checkbox-item { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 14px; }
-        .btn-tg { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; background: var(--tg-active-item); color: white; margin-top: 8px; }
-        .btn-tg-secondary { background: transparent; color: var(--tg-active-item); border: 1px solid var(--tg-border); }
-        .switch-auth-mode { text-align: center; margin-top: 16px; font-size: 13px; color: var(--tg-active-item); cursor: pointer; }
-        .chat-container { display: flex; flex-direction: column; height: 450px; background: var(--tg-chat-bg); border: 1px solid var(--tg-border); border-radius: 12px; overflow: hidden; width: 100%; }
-        .chat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
-        .msg-bubble { max-width: 75%; padding: 8px 14px; border-radius: 12px; font-size: 14px; color: var(--tg-text); position: relative; }
-        .msg-bubble.incoming { background: var(--tg-other-msg); align-self: flex-start; border-bottom-left-radius: 4px; }
-        .msg-bubble.outgoing { background: var(--tg-my-msg); align-self: flex-end; border-bottom-right-radius: 4px; }
-        .msg-author { font-size: 12px; font-weight: bold; margin-bottom: 2px; color: var(--tg-active-item); }
-        .msg-actions { font-size: 11px; margin-top: 4px; display: flex; gap: 8px; justify-content: flex-end; opacity: 0.6; cursor: pointer; }
-        .chat-input-area { display: flex; padding: 10px; background: var(--tg-bg); border-top: 1px solid var(--tg-border); gap: 8px; }
-        .chat-input-area input { margin: 0; }
-        .chat-input-area .btn-tg { width: auto; margin: 0; padding: 0 20px; }
-        #push-notification { position: fixed; top: -100px; left: 50%; transform: translateX(-50%); background: #323232; color: white; padding: 12px 24px; border-radius: 25px; font-size: 14px; z-index: 1000; transition: top 0.4s; }
-        #push-notification.show { top: 20px; }
-        @media (max-width: 768px) { #mobile-menu-toggle { display: block; } #left-menu { position: absolute; left: -320px; top: 0; bottom: 0; transition: left 0.3s; } #left-menu.open { left: 0; } }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        body { background: var(--bg); color: var(--text); display: flex; height: 100vh; overflow: hidden; }
+        
+        #auth-screen, #app-screen { width: 100vw; height: 100vh; display: flex; }
+        .hidden { display: none !important; }
+
+        /* Авторизация */
+        #auth-screen { flex-direction: column; align-items: center; justify-content: center; background: var(--sidebar); }
+        .auth-box { background: var(--bg); padding: 30px; border-radius: 10px; width: 320px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        input, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: none; background: var(--active); color: var(--text); }
+        button { background: var(--primary); cursor: pointer; font-weight: bold; }
+
+        /* Главное приложение */
+        #sidebar { width: 30%; background: var(--sidebar); border-right: 1px solid rgba(0,0,0,0.2); display: flex; flex-direction: column; }
+        #chat-area { width: 70%; display: flex; flex-direction: column; background: var(--bg); }
+        
+        @media (max-width: 768px) {
+            #sidebar { width: 100%; }
+            #chat-area { display: none; width: 100%; }
+            .mobile-back { display: block !important; }
+        }
+
+        .header { padding: 15px; background: var(--sidebar); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(0,0,0,0.1); }
+        .list { flex: 1; overflow-y: auto; }
+        .item { padding: 15px; border-bottom: 1px solid rgba(0,0,0,0.05); cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .item:hover, .item.active { background: var(--active); }
+        
+        .messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+        .msg { max-width: 70%; padding: 10px 14px; border-radius: 12px; position: relative; word-break: break-word; }
+        .msg.in { background: var(--msg-in); align-self: flex-start; }
+        .msg.out { background: var(--msg-out); align-self: flex-end; }
+        
+        .msg-meta { font-size: 0.75rem; opacity: 0.6; text-align: right; margin-top: 4px; display: flex; justify-content: flex-end; gap: 5px; }
+        .input-bar { padding: 15px; background: var(--sidebar); display: flex; gap: 10px; }
+        
+        .status { font-size: 0.8rem; }
+        .online { color: #40a7e3; }
+        .offline { color: #8596a5; }
+        
+        .modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--sidebar); padding: 20px; border-radius: 10px; box-shadow: 0 0 20px rgba(0,0,0,0.5); z-index: 100; }
+        .backdrop { position: fixed; top:0; left:0; width:100vw; height:100vh; background: rgba(0,0,0,0.5); z-index: 99; }
     </style>
 </head>
 <body>
 
-    <button id="mobile-menu-toggle" onclick="document.getElementById('left-menu').classList.toggle('open')">☰ Меню</button>
-    <button class="theme-toggle-btn" id="theme-toggle" style="position: absolute; top: 12px; right: 12px; z-index: 100;">🌙</button>
-    <div id="push-notification">🔔 <span id="push-text"></span></div>
-
-    <div id="left-menu">
-        <div class="sidebar-header">
-            <h2>Ink chat</h2>
-            <div class="user-badge">Аккаунт: <span id="current-user-label" style="font-weight:bold;">Гость</span></div>
-        </div>
-        <div class="menu-scroll">
-            <div class="menu-section-title">Сессия</div>
-            <button class="menu-btn active-tab" id="tab-win-auth" onclick="switchWindow('win-auth')">🔑 Авторизация</button>
-            <button class="menu-btn" id="tab-win-messages" onclick="switchWindow('win-messages'); uiUpdateChatSelection();">💬 Чат и Диалоги</button>
-            <div class="menu-section-title">Контакты</div>
-            <button class="menu-btn" id="tab-win-friends-find" onclick="switchWindow('win-friends-find')">🔍 Найти друга</button>
-            <div class="menu-section-title">Настройки</div>
-            <button class="menu-btn" id="tab-win-profile" onclick="switchWindow('win-profile'); uiUpdateProfile();">👤 Мой профиль</button>
-            <button class="menu-btn" id="tab-win-group-create" onclick="switchWindow('win-group-create'); uiRenderGroupCreationList();">👥 Создать группу</button>
+    <!-- ЭКРАН АВТОРИЗАЦИИ -->
+    <div id="auth-screen">
+        <div class="auth-box">
+            <h2 style="text-align:center; margin-bottom:15px;">Ink chat</h2>
+            <div id="login-form">
+                <input type="text" id="auth-id" placeholder="10-значный ID">
+                <input type="password" id="auth-pass" placeholder="Пароль">
+                <button onclick="auth(false)">Войти</button>
+                <p style="text-align:center; margin-top:10px; cursor:pointer; font-size:0.9rem;" onclick="toggleAuthMode(true)">Создать аккаунт</p>
+            </div>
+            <div id="reg-form" class="hidden">
+                <input type="text" id="reg-name" placeholder="Ваше имя">
+                <input type="password" id="reg-pass" placeholder="Пароль">
+                <button onclick="auth(true)">Зарегистрироваться</button>
+                <p style="text-align:center; margin-top:10px; cursor:pointer; font-size:0.9rem;" onclick="toggleAuthMode(false)">Уже есть аккаунт</p>
+            </div>
         </div>
     </div>
 
-    <div id="workspace">
-        <div class="window-box active" id="win-auth">
-            <h2>Вход в Ink chat</h2>
-            <div id="auth-form-block">
-                <div class="input-group"><label>Имя пользователя</label><input type="text" id="auth-username"></div>
-                <div class="input-group"><label>Пароль</label><input type="password" id="auth-password"></div>
-                <button class="btn-tg" onclick="actionLogin()">Войти</button>
-                <div class="switch-auth-mode" onclick="toggleAuthMode(false)">Нет аккаунта? Зарегистрироваться</div>
+    <!-- ОСНОВНОЙ ЭКРАН -->
+    <div id="app-screen" class="hidden">
+        <div id="sidebar">
+            <div class="header">
+                <span id="my-profile" style="font-weight:bold; cursor:pointer;" onclick="openProfile()">Профиль</span>
+                <span style="cursor:pointer;" onclick="toggleTheme()">🌙/☀️</span>
             </div>
-            <div id="reg-form-block" style="display:none;">
-                <div class="input-group"><label>Придумайте имя</label><input type="text" id="reg-username"></div>
-                <div class="input-group"><label>Пароль</label><input type="password" id="reg-password"></div>
-                <div class="input-group"><label>Повторите пароль</label><input type="password" id="reg-password-confirm"></div>
-                <button class="btn-tg btn-tg-secondary" id="btn-toggle-reg-pass" onclick="toggleRegisterPassword()" style="margin-bottom:10px; padding:6px; font-size:12px;">👁️ Показать код</button>
-                <button class="btn-tg" onclick="actionRegister()">Создать аккаунт</button>
-                <div class="switch-auth-mode" onclick="toggleAuthMode(true)">Уже есть аккаунт? Войти</div>
+            <div style="padding:10px; display:flex; gap:5px;">
+                <button style="padding:6px; margin:0; font-size:0.8rem;" onclick="openSearch()">+ Друг</button>
+                <button style="padding:6px; margin:0; font-size:0.8rem;" onclick="openGroupCreate()">+ Группа</button>
             </div>
+            <div class="list" id="chats-list"></div>
         </div>
 
-        <div class="window-box" id="win-messages" style="max-width: 700px;">
-            <h2>Диалоги</h2>
-            <div class="input-group">
-                <label>Выберите активный чат</label>
-                <select id="select-active-chat" onchange="uiUpdateMessages()"></select>
-            </div>
-            <div class="chat-container">
-                <div class="chat-messages" id="ui-chat-messages"></div>
-                <div class="chat-input-area">
-                    <input type="hidden" id="edit-msg-id">
-                    <input type="text" id="message-input" placeholder="Напишите сообщение...">
-                    <button class="btn-tg" id="btn-send-msg" onclick="actionSendMessage()">Отправить</button>
-                    <button class="btn-tg" id="btn-save-edit-msg" style="display:none;" onclick="actionSaveEditedMessage()">Сохранить</button>
+        <div id="chat-area">
+            <div class="header">
+                <button class="mobile-back hidden" style="width:auto; margin:0; padding:5px 10px;" onclick="backToSidebar()">Назад</button>
+                <div>
+                    <h3 id="chat-title">Выберите чат</h3>
+                    <span id="chat-status"></span>
                 </div>
             </div>
+            <div class="messages" id="msg-container"></div>
+            <div class="input-bar hidden" id="chat-input-bar">
+                <input type="text" id="msg-input" placeholder="Напишите сообщение..." onkeypress="if(event.key==='Enter')sendMsg()">
+                <button style="width:auto; margin:0;" onclick="sendMsg()">➤</button>
+            </div>
         </div>
+    </div>
 
-        <div class="window-box" id="win-friends-find">
-            <h2>Добавить друга по ID</h2>
-        // ИСПРАВЛЕНО: Указан точный адрес вашего сервера на Render без лишних слэшей
-        const BACKEND_URL = 'https://onrender.com';
+    <div id="backdrop" class="backdrop hidden" onclick="closeModals()"></div>
+    <div id="modal" class="modal hidden"></div>
+    <script>
+        const socket = io();
+        let me = null;
+        let activeChat = null;
+        let friends = JSON.parse(localStorage.getItem('ink_friends') || '[]');
 
-        function getCurrentUser() { try { return JSON.parse(sessionStorage.getItem('ink_current_user')); } catch(e){return null;} }
-        function getMyFriends() { try { return JSON.parse(localStorage.getItem('ink_friends') || '[]'); } catch(e){return [];} }
-        function saveMyFriends(arr) { localStorage.setItem('ink_friends', JSON.stringify(arr)); }
+        // Авто-пробуждение (Render)
+        setInterval(() => socket.emit('ping'), 25000);
 
-        function switchWindow(id) {
-            document.querySelectorAll('.window-box').forEach(w => w.classList.remove('active'));
-            document.querySelectorAll('.menu-btn').forEach(b => b.classList.remove('active-tab'));
-            const win = document.getElementById(id);
-            if(win) win.classList.add('active');
-            const tab = document.getElementById('tab-' + id);
-            if(tab) tab.classList.add('active-tab');
-            if(id === 'win-messages') { uiUpdateChatSelection(); }
+        // Тема оформления
+        if(localStorage.getItem('theme') === 'light') document.body.setAttribute('data-theme', 'light');
+        function toggleTheme() {
+            const current = document.body.getAttribute('data-theme');
+            const target = current === 'light' ? 'dark' : 'light';
+            if(target === 'light') document.body.setAttribute('data-theme', 'light');
+            else document.body.removeAttribute('data-theme');
+            localStorage.setItem('theme', target);
         }
 
-        function toggleAuthMode(showLogin) {
-            document.getElementById('auth-form-block').style.display = showLogin ? 'block' : 'none';
-            document.getElementById('reg-form-block').style.display = showLogin ? 'none' : 'block';
+        function toggleAuthMode(isReg) {
+            document.getElementById('login-form').classList.toggle('hidden', isReg);
+            document.getElementById('reg-form').classList.toggle('hidden', !isReg);
         }
 
-        function showPushNotification(text) {
-            const push = document.getElementById('push-notification');
-            document.getElementById('push-text').innerText = text;
-            push.classList.add('show');
-            setTimeout(() => { push.classList.remove('show'); }, 4000);
+        function auth(isRegister) {
+            const payload = isRegister ? 
+                { name: document.getElementById('reg-name').value, password: document.getElementById('reg-pass').value, isRegister: true } :
+                { id: document.getElementById('auth-id').value, password: document.getElementById('auth-pass').value, isRegister: false };
+            socket.emit('auth', payload);
         }
 
-        function generateTenDigitID() { return Math.floor(1000000000 + Math.random() * 9000000000).toString(); }
-        function escapeHTML(str) { return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+        socket.on('auth_success', (user) => {
+            me = user;
+            document.getElementById('auth-screen').classList.add('hidden');
+            document.getElementById('app-screen').classList.remove('hidden');
+            updateProfileHeader();
+            socket.emit('get_chats');
+        });
 
-        function toggleRegisterPassword() {
-            const p1 = document.getElementById('reg-password');
-            const p2 = document.getElementById('reg-password-confirm');
-            const btn = document.getElementById('btn-toggle-reg-pass');
-            const mode = p1.type === 'password' ? 'text' : 'password';
-            p1.type = mode; p2.type = mode;
-            btn.innerText = mode === 'password' ? '👁️ Показать код' : '👁️ Скрыть код';
+        socket.on('auth_error', msg => alert(msg));
+
+        function updateProfileHeader() {
+            document.getElementById('my-profile').innerHTML = `${me.name} ${me.isAdmin ? '☑️' : ''} <br><small style="opacity:0.6;">ID: ${me.id}</small>`;
         }
 
-        function uiSyncUserLabel() {
-            let u = getCurrentUser();
-            if(u) {
-                let badge = u.isVerified ? " ☑️" : "";
-                document.getElementById('current-user-label').innerHTML = escapeHTML(u.name) + badge;
-            }
-        }
-
-        function uiUpdateProfile() {
-            let u = getCurrentUser();
-            if(!u) return;
-            document.getElementById('prof-id').value = u.id;
-            document.getElementById('prof-date').value = u.created_at;
-            document.getElementById('edit-profile-name').value = u.name;
-            document.getElementById('edit-profile-password').value = u.pass;
-        }
-
-        // --- API: РЕГИСТРАЦИЯ ---
-        async function actionRegister() {
-            const name = document.getElementById('reg-username').value.trim();
-            const pass = document.getElementById('reg-password').value.trim();
-            const confirm = document.getElementById('reg-password-confirm').value.trim();
-            if(!name || !pass || !confirm) return alert("Заполните все поля!");
-            if(pass !== confirm) return alert("Пароли не совпадают!");
-
-            const randID = generateTenDigitID();
-            const today = new Date().toLocaleDateString('ru-RU');
-
-            try {
-                // ИСПРАВЛЕНО: Убран неверный адрес 'onrender.com'
-                const res = await fetch(`${BACKEND_URL}/api/register`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: randID, name, pass, created_at: today })
-                });
-                const data = await res.json();
-                if (!res.ok) return alert(data.error);
-
-                sessionStorage.setItem('ink_current_user', JSON.stringify(data.user));
-                uiSyncUserLabel();
-                showPushNotification(`Аккаунт создан! ID: ${randID}`);
-                switchWindow('win-messages');
-            } catch (err) { alert("Сервер бэкенда недоступен: " + err.message); }
-        }
-
-        // --- API: ВХОД В АККАУНТ ---
-        async function actionLogin() {
-            const name = document.getElementById('auth-username').value.trim();
-            const pass = document.getElementById('auth-password').value.trim();
-            if(!name || !pass) return alert("Заполните все поля!");
-            
-            try {
-                // ИСПРАВЛЕНО: Запрос идет строго на ваш эндпоинт авторизации
-                const res = await fetch(`${BACKEND_URL}/api/login`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, pass })
-                });
-                const data = await res.json();
-                if (!res.ok) return alert(data.error);
-                
-                sessionStorage.setItem('ink_current_user', JSON.stringify(data.user));
-                uiSyncUserLabel();
-                showPushNotification(`Вы вошли как ${data.user.name}`);
-                switchWindow('win-messages');
-            } catch (err) { alert("Сервер бэкенда недоступен: " + err.message); }
-        }
-        // --- API: ДОБАВЛЕНИЕ КОНТАКТА ПО ID ---
-        async function actionFindFriend() {
-            let myFriends = getMyFriends();
-            let currentUser = getCurrentUser();
-            if(!currentUser) return alert("Сначала авторизуйтесь!");
-            const searchId = document.getElementById('search-friend-name').value.trim();
-            if(!searchId) return alert("Введите ID!");
-            if (String(searchId) === String(currentUser.id)) return alert("Это ваш собственный ID!");
-
-            try {
-                // ИСПРАВЛЕНО: Исправлен путь к поиску, добавлен правильный query-параметр
-                const res = await fetch(`${BACKEND_URL}/api/find-user?searchId=${searchId}`);
-                const data = await res.json();
-                if (!data.matches) return alert("Пользователь не найден!");
-
-                let target = data.matches;
-                if (myFriends.some(f => String(f.id) === String(target.id))) return alert("Уже добавлен!");
-
-                myFriends.push({ id: target.id, name: target.name });
-                saveMyFriends(myFriends);
-                document.getElementById('search-friend-name').value = '';
-                showPushNotification(`Контакт "${target.name}" добавлен!`);
-                uiUpdateChatSelection();
-            } catch (err) { alert("Ошибка поиска на сервере: " + err.message); }
-        }
-
-        // --- API: СОХРАНЕНИЕ НАСТРОЕК ПРОФИЛЯ ---
-        async function actionSaveProfile() {
-            let u = getCurrentUser();
-            const newName = document.getElementById('edit-profile-name').value.trim();
-            const newPass = document.getElementById('edit-profile-password').value.trim();
-            if(!newName || !newPass) return alert("Поля не могут быть пустыми!");
-
-            try {
-                const res = await fetch(`${BACKEND_URL}/api/profile/update`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: u.id, newName, newPass })
-                });
-                const data = await res.json();
-                if(!res.ok) return alert(data.error);
-
-                sessionStorage.setItem('ink_current_user', JSON.stringify(data.user));
-                uiSyncUserLabel();
-                showPushNotification("Профиль успешно изменен!");
-            } catch(e) { alert("Ошибка обновления"); }
-        }
-
-        // --- API: СОЗДАНИЕ ГРУППЫ ---
-        async function actionCreateGroup() {
-            const gName = document.getElementById('new-group-name').value.trim();
-            let u = getCurrentUser();
-            if (!gName) return alert("Введите имя группы!");
-
-            const checkboxes = document.querySelectorAll('.group-member-checkbox:checked');
-            let members = Array.from(checkboxes).map(cb => cb.value);
-
-            try {
-                const res = await fetch(`${BACKEND_URL}/api/groups/create`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ gName, creator: u.name, members })
-                });
-                const data = await res.json();
-                if(!res.ok) return alert(data.error);
-
-                showPushNotification(`Группа "${gName}" создана!`);
-                document.getElementById('new-group-name').value = '';
-                switchWindow('win-messages');
-            } catch(e) { alert("Ошибка сети"); }
-        }
-
-        function uiRenderGroupCreationList() {
-            const container = document.getElementById('group-friends-checkboxes');
-            if(!container) return;
+        socket.on('chats_list', (chats) => {
+            const container = document.getElementById('chats-list');
             container.innerHTML = '';
-            let friends = getMyFriends();
-            if(friends.length === 0) { container.innerHTML = 'Список друзей пуст'; return; }
-            friends.forEach(f => {
-                container.innerHTML += `<label class="checkbox-item"><input type="checkbox" class="group-member-checkbox" value="${f.name}"> <span>${f.name}</span></label>`;
-            });
-        }
-
-        // --- UI: ОБНОВЛЕНИЕ СПИСКА АКТИВНЫХ ДИАЛОГОВ И СТАТУСОВ ---
-        async function uiUpdateChatSelection() {
-            let u = getCurrentUser();
-            if(!u) return;
-            const selectChat = document.getElementById('select-active-chat');
-            if(!selectChat) return;
-            const prevSelection = selectChat.value;
-
-            try {
-                const dialogsRes = await fetch(`${BACKEND_URL}/api/active-dialogs?username=${u.name}`);
-                const dialogsData = await dialogsRes.json();
-
-                let namesToCheck = dialogsData.dialogs.map(d => d.name);
-                getMyFriends().forEach(f => { if(!namesToCheck.includes(f.name)) namesToCheck.push(f.name); });
-
-                const statusRes = await fetch(`${BACKEND_URL}/api/users/status`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ usernames: namesToCheck })
-                });
-                const statusData = await statusRes.json();
-
-                selectChat.innerHTML = '';
-                let rendered = [];
-
-                dialogsData.dialogs.forEach(d => {
-                    rendered.push(d.name);
-                    let info = statusData.statuses[d.name] || { isOnline: false, isVerified: false };
-                    let status = info.isOnline ? '• в сети' : '• офлайн';
-                    let badge = info.isVerified ? ' ☑️' : '';
-                    selectChat.innerHTML += `<option value="ЛС: ${d.name}">💬 ${d.name}${badge} (${status})</option>`;
-                });
-
-                getMyFriends().forEach(f => {
-                    if (!rendered.includes(f.name)) {
-                        let info = statusData.statuses[f.name] || { isOnline: false, isVerified: false };
-                        let status = info.isOnline ? '• в сети' : '• офлайн';
-                        let badge = info.isVerified ? ' ☑️' : '';
-                        selectChat.innerHTML += `<option value="ЛС: ${f.name}">💬 ${f.name}${badge} (${status})</option>`;
-                    }
-                });
-
-                const groupsRes = await fetch(`${BACKEND_URL}/api/groups`);
-                const groupsData = await groupsRes.json();
-                groupsData.groups.forEach(g => {
-                    if (g.creator === u.name || g.members.includes(u.name)) {
-                        selectChat.innerHTML += `<option value="Группа: ${g.name}">👥 Группа: ${g.name}</option>`;
-                    }
-                });
-
-                if(prevSelection) selectChat.value = prevSelection;
-                uiUpdateMessages();
-            } catch(e){}
-        }
-        // --- API: ОТПРАВКА СООБЩЕНИЯ ---
-        async function actionSendMessage() {
-            let u = getCurrentUser();
-            const txt = document.getElementById('message-input').value.trim();
-            const targetChat = document.getElementById('select-active-chat').value;
-            if(!txt || !targetChat) return;
-
-            let isGroup = targetChat.startsWith("Группа: ");
-            let recipientName = isGroup ? null : targetChat.replace("ЛС: ", "");
-
-            try {
-                await fetch(`${BACKEND_URL}/api/messages/send`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ sender: u.name, target: targetChat, recipient: recipientName, text: txt })
-                });
-                document.getElementById('message-input').value = '';
-                uiUpdateMessages();
-            } catch(e){}
-        }
-
-        function startEditMessage(id, text) {
-            document.getElementById('message-input').value = text;
-            document.getElementById('edit-msg-id').value = id;
-            document.getElementById('btn-send-msg').style.display = 'none';
-            document.getElementById('btn-save-edit-msg').style.display = 'inline-block';
-        }
-
-        // --- API: СОХРАНЕНИЕ ОТРЕДАКТИРОВАННОГО СООБЩЕНИЯ ---
-        async function actionSaveEditedMessage() {
-            let u = getCurrentUser();
-            const id = document.getElementById('edit-msg-id').value;
-            const newText = document.getElementById('message-input').value.trim();
-            if(!newText) return;
-
-            try {
-                const res = await fetch(`${BACKEND_URL}/api/messages/edit`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id, username: u.name, newText })
-                });
-                if (!res.ok) { let d = await res.json(); alert(d.error); }
+            
+            chats.forEach(chat => {
+                if(!chat.isGroup && !friends.includes(chat.id)) return;
                 
-                document.getElementById('message-input').value = '';
-                document.getElementById('btn-send-msg').style.display = 'inline-block';
-                document.getElementById('btn-save-edit-msg').style.display = 'none';
-                uiUpdateMessages();
-            } catch(e){}
-        }
-
-        // --- API: УДАЛЕНИЕ СООБЩЕНИЯ ---
-        async function actionDeleteMessage(id) {
-            let u = getCurrentUser();
-            try {
-                const res = await fetch(`${BACKEND_URL}/api/messages/delete`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id, username: u.name })
-                });
-                if (!res.ok) { let d = await res.json(); alert(d.error); }
-                uiUpdateMessages();
-            } catch(e){}
-        }
-
-        // --- UI И API: ЧТЕНИЕ И ВЫВОД ИСТОРИИ СООБЩЕНИЙ ---
-        async function uiUpdateMessages() {
-            let u = getCurrentUser();
-            const chat = document.getElementById('ui-chat-messages');
-            const selectChat = document.getElementById('select-active-chat');
-            if(!chat || !u || !selectChat || !selectChat.value) return;
-
-            let targetChat = selectChat.value;
-
-            try {
-                await fetch(`${BACKEND_URL}/api/messages/read`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ chatTarget: targetChat, username: u.name })
-                });
-
-                const res = await fetch(`${BACKEND_URL}/api/messages`);
-                const data = await res.json();
-
-                let isGroup = targetChat.startsWith("Группа: ");
-                let partnerName = isGroup ? null : targetChat.replace("ЛС: ", "");
-
-                const filtered = data.messages.filter(m => {
-                    if (isGroup) return m.target === targetChat;
-                    return (m.sender === u.name && m.recipient === partnerName) || (m.sender === partnerName && m.recipient === u.name);
-                });
-
-                chat.innerHTML = '';
-                if(filtered.length === 0) {
-                    chat.innerHTML = `<div style="text-align:center; color:var(--tg-text-muted); margin-top:20px; font-size:13px;">История пуста.</div>`;
-                    return;
-                }
-
-                let senders = Array.from(new Set(filtered.map(m => m.sender)));
-                const checkRes = await fetch(`${BACKEND_URL}/api/users/status`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ usernames: senders })
-                });
-                const checkData = await checkRes.json();
-
-                filtered.forEach(m => {
-                    const isMyMsg = (m.sender === u.name);
-                    const statusCheck = isMyMsg ? `<span style="font-size:10px; margin-left:5px; color:var(--tg-active-item); float:right;">${m.read ? '✓✓' : '✓'}</span>` : '';
-                    let info = checkData.statuses[m.sender] || { isVerified: false };
-                    let badge = info.isVerified ? ' ☑️' : '';
-
-                    const actionsHtml = isMyMsg ? `
-                        <div class="msg-actions">
-                            <span onclick="startEditMessage('${m.id}', '${escapeHTML(m.text)}')">✏️</span>
-                            <span onclick="actionDeleteMessage('${m.id}')">❌</span>
-                        </div>` : '';
-
-                    chat.innerHTML += `
-                        <div class="msg-bubble ${isMyMsg ? 'outgoing' : 'incoming'}">
-                            ${!isMyMsg ? `<div class="msg-author">${escapeHTML(m.sender)}${badge}</div>` : ''}
-                            <div>${escapeHTML(m.text)}${statusCheck}</div>
-                            ${actionsHtml}
-                        </div>`;
-                });
-                chat.scrollTop = chat.scrollHeight;
-            } catch(e){}
-        }
-
-        // --- ИНТЕРВАЛЫ АВТООБНОВЛЕНИЯ И АКТИВНОСТИ ---
-        setInterval(async () => {
-            let u = getCurrentUser(); if(!u) return;
-            try { await fetch(`${BACKEND_URL}/api/heartbeat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u.name }) }); } catch(e){}
-        }, 6000);
-
-        setInterval(async () => {
-            let u = getCurrentUser(); if(!u) return;
-            if(document.getElementById('win-messages').classList.contains('active')) { uiUpdateMessages(); }
-        }, 4000);
-
-        // --- ИНИЦИАЛИЗАЦИЯ И ПРОГРЕВ БЭКЕНДА ПРИ ЗАГРУЗКЕ СТРАНИЦЫ ---
-        document.addEventListener('DOMContentLoaded', () => {
-            // Фоновый запрос для вывода сервера Render из спящего режима
-            fetch(`${BACKEND_URL}/api/messages`).catch(() => console.log("Прогрев бэкенда..."));
-
-            const themeToggleBtn = document.getElementById('theme-toggle');
-            if (!themeToggleBtn) return;
-
-            const savedTheme = localStorage.getItem('ink_theme') || 'light';
-            document.documentElement.setAttribute('data-theme', savedTheme);
-            themeToggleBtn.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
-
-            themeToggleBtn.addEventListener('click', () => {
-                const currentTheme = document.documentElement.getAttribute('data-theme');
-                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-                document.documentElement.setAttribute('data-theme', newTheme);
-                localStorage.setItem('ink_theme', newTheme);
-                themeToggleBtn.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+                const item = document.createElement('div');
+                item.className = `item ${activeChat?.id === chat.id ? 'active' : ''}`;
+                item.onclick = () => selectChat(chat);
+                
+                const statusHtml = chat.isGroup ? '' : 
+                    `<span class="status ${chat.isOnline ? 'online' : 'offline'}" data-uid="${chat.id}">${chat.isOnline ? '• в сети' : '• офлайн'}</span>`;
+                
+                item.innerHTML = `<div>${chat.name} ${chat.isAdmin ? '☑️' : ''}</div>${statusHtml}`;
+                container.appendChild(item);
             });
         });
+
+        function selectChat(chat) {
+            activeChat = chat;
+            document.getElementById('chat-title').innerText = chat.name;
+            document.getElementById('chat-status').innerText = chat.isGroup ? 'Группа' : '';
+            document.getElementById('chat-input-bar').classList.remove('hidden');
+            
+            if (window.innerWidth <= 768) {
+                document.getElementById('sidebar').style.display = 'none';
+                document.getElementById('chat-area').style.display = 'flex';
+                document.querySelector('.mobile-back').classList.remove('hidden');
+            }
+
+            socket.emit('get_messages', { chatId: chat.id, isGroup: chat.isGroup });
+            socket.emit('get_chats');
+        }
+
+        function backToSidebar() {
+            document.getElementById('sidebar').style.display = 'flex';
+            document.getElementById('chat-area').style.display = 'none';
+        }
+
+        socket.on('messages_list', (msgs) => {
+            const container = document.getElementById('msg-container');
+            container.innerHTML = '';
+            msgs.forEach(appendMessage);
+            container.scrollTop = container.scrollHeight;
+        });
+
+        function appendMessage(msg) {
+            const container = document.getElementById('msg-container');
+            const isMy = msg.senderId === me.id;
+            
+            const div = document.createElement('div');
+            div.className = `msg ${isMy ? 'out' : 'in'}`;
+            div.id = msg.id;
+
+            const nameSpan = document.createElement('div');
+            nameSpan.style = 'font-size:0.8rem; font-weight:bold; margin-bottom:3px;';
+            nameSpan.innerText = `${msg.senderName} ${msg.senderIsAdmin ? '☑️' : ''}`;
+            
+            const textSpan = document.createElement('span');
+            textSpan.className = 'msg-text';
+            textSpan.textContent = msg.text; // Защита от XSS
+
+            const meta = document.createElement('div');
+            meta.className = 'msg-meta';
+            meta.innerHTML = `${msg.edited ? '✏️ ' : ''} ${msg.time} <span class="ticks">${isMy ? (msg.isRead ? '✓✓' : '✓') : ''}</span>`;
+
+            if(!isMy) div.appendChild(nameSpan);
+            div.appendChild(textSpan);
+            div.appendChild(meta);
+
+            if(isMy) {
+                div.style.cursor = 'pointer';
+                div.onclick = () => showMsgActions(msg.id, msg.text);
+            }
+
+            container.appendChild(div);
+        }
+
+        socket.on('new_msg', (msg) => {
+            if (activeChat && ((activeChat.isGroup && msg.receiverId === activeChat.id) || 
+                (!activeChat.isGroup && (msg.senderId === activeChat.id || msg.receiverId === activeChat.id)))) {
+                appendMessage(msg);
+                const container = document.getElementById('msg-container');
+                container.scrollTop = container.scrollHeight;
+                
+                if(msg.senderId !== me.id) {
+                    socket.emit('get_messages', { chatId: activeChat.id, isGroup: activeChat.isGroup });
+                }
+            }
+        });
+
+        function sendMsg() {
+            const input = document.getElementById('msg-input');
+            if(!input.value.trim() || !activeChat) return;
+            socket.emit('send_msg', { receiverId: activeChat.id, isGroup: activeChat.isGroup, text: input.value });
+            input.value = '';
+        }
+
+        function showMsgActions(msgId, currentText) {
+            const modal = document.getElementById('modal');
+            modal.innerHTML = `
+                <button onclick="editMsgPrompt('${msgId}', '${currentText}')">✏️ Редактировать</button>
+                <button style="background:#d93838;" onclick="deleteMsg('${msgId}')">❌ Удалить</button>
+            `;
+            openModal();
+        }
+
+        function editMsgPrompt(msgId, oldText) {
+            const nText = prompt("Редактировать сообщение:", oldText);
+            if(nText && nText.trim()) {
+                socket.emit('edit_msg', { msgId, newText: nText });
+            }
+            closeModals();
+        }
+
+        function deleteMsg(msgId) {
+            if(confirm("Удалить сообщение для всех?")) {
+                socket.emit('delete_msg', { msgId });
+            }
+            closeModals();
+        }
+
+        socket.on('msg_edited', ({ msgId, text }) => {
+            const el = document.getElementById(msgId);
+            if(el) {
+                el.querySelector('.msg-text').textContent = text;
+                if(!el.querySelector('.msg-meta').innerHTML.includes('✏️')) {
+                    el.querySelector('.msg-meta').innerHTML = '✏️ ' + el.querySelector('.msg-meta').innerHTML;
+                }
+            }
+        });
+
+        socket.on('msg_deleted', ({ msgId }) => {
+            document.getElementById(msgId)?.remove();
+        });
+
+        socket.on('msg_read', ({ msgId }) => {
+            const el = document.getElementById(msgId);
+            if(el) el.querySelector('.ticks').innerText = '✓✓';
+        });
+
+        socket.on('user_status', ({ id, isOnline }) => {
+            document.querySelectorAll(`[data-uid="${id}"]`).forEach(el => {
+                el.className = `status ${isOnline ? 'online' : 'offline'}`;
+                el.innerText = isOnline ? '• в сети' : '• офлайн';
+            });
+        });
+
+        socket.on('user_renamed', ({ id, name }) => {
+            if(activeChat && activeChat.id === id) {
+                document.getElementById('chat-title').innerText = name;
+            }
+            socket.emit('get_chats');
+        });
+
+        function openSearch() {
+            const modal = document.getElementById('modal');
+            modal.innerHTML = `
+                <h3>Добавить друга по ID</h3>
+                <input type="text" id="search-uid" placeholder="10-значный ID">
+                <button onclick="searchContact()">Найти</button>
+            `;
+            openModal();
+        }
+
+        function searchContact() {
+            const id = document.getElementById('search-uid').value;
+            socket.emit('search_contact', id);
+        }
+
+        socket.on('contact_found', (user) => {
+            if(!friends.includes(user.id)) {
+                friends.push(user.id);
+                localStorage.setItem('ink_friends', JSON.stringify(friends));
+            }
+            alert(`Контакт ${user.name} добавлен!`);
+            closeModals();
+            socket.emit('get_chats');
+        });
+        socket.on('contact_error', m => alert(m));
+
+        function openGroupCreate() {
+            const modal = document.getElementById('modal');
+            modal.innerHTML = `
+                <h3>Создать закрытую группу</h3>
+                <input type="text" id="g-name" placeholder="Название группы">
+                <p style="margin:5px 0;font-size:0.8rem;">Все ваши друзья будут добавлены автоматически</p>
+                <button onclick="createGroup()">Создать</button>
+            `;
+            openModal();
+        }
+
+        function createGroup() {
+        socket.on('group_created', () => socket.emit('get_chats'));
+
+        function openProfile() {
+            const modal = document.getElementById('modal');
+            modal.innerHTML = `
+                <h3>Редактировать профиль</h3>
+                <input type="text" id="p-name" value="${me.name}" placeholder="Имя">
+                <input type="password" id="p-pass" value="${me.password}" placeholder="Новый пароль">
+                <button onclick="updateProfile()">Сохранить</button>
+            `;
+            openModal();
+        }
+
+        function updateProfile() {
+            const name = document.getElementById('p-name').value;
+            const password = document.getElementById('p-pass').value;
+            socket.emit('update_profile', { name, password });
+            closeModals();
+        }
+
+        socket.on('profile_updated', (user) => {
+            me = user;
+            updateProfileHeader();
+        });
+
+        function openModal() { 
+            document.getElementById('modal').classList.remove('hidden'); 
+            document.getElementById('backdrop').classList.remove('hidden'); 
+        }
+        function closeModals() { 
+            document.getElementById('modal').classList.add('hidden'); 
+            document.getElementById('backdrop').classList.add('hidden'); 
+        }
     </script>
 </body>
 </html>
