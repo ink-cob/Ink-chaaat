@@ -1,241 +1,189 @@
 const express = require('express');
-const cors = require('cors');
 const http = require('http');
-const fs = require('fs');
-const path = require('path');
+const { Server } = require('socket.io');
+const session = require('express-session');
+const sqlite3 = require('sqlite3').verbose();
+const bcrypt = require('bcryptjs');
+const cors = require('cors'); // Добавили cors
 
 const app = express();
 const server = http.createServer(app);
 
-// НАСТРОЙКА CORS: Даем доступ вашему фронтенду на GitHub Pages
+// Настройка CORS для работы с GitHub Pages
+const ALLOWED_ORIGIN = "https://ink-cob.github.io";
+
 app.use(cors({
-    origin: 'https://github.io',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    origin: ALLOWED_ORIGIN,
     credentials: true
 }));
 
-app.use(express.json());
-
-// Системные файлы для хранения данных во временной папке Render
-const USERS_FILE = '/tmp/db_users.json';
-const MESSAGES_FILE = '/tmp/db_messages.json';
-const GROUPS_FILE = '/tmp/db_groups.json';
-
-let db = { users: [], messages: [], groups: [] };
-
-// Функция безопасного чтения и автосоздания файлов базы
-const loadDatabase = () => {
-    try {
-        if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, '[]', 'utf8');
-        if (!fs.existsSync(MESSAGES_FILE)) fs.writeFileSync(MESSAGES_FILE, '[]', 'utf8');
-        if (!fs.existsSync(GROUPS_FILE)) fs.writeFileSync(GROUPS_FILE, '[]', 'utf8');
-
-        db.users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
-        db.messages = JSON.parse(fs.readFileSync(MESSAGES_FILE, 'utf8'));
-        db.groups = JSON.parse(fs.readFileSync(GROUPS_FILE, 'utf8'));
-        
-        console.log("ВЕЧНАЯ БАЗА ДАННЫХ УСПЕШНО ЗАГРУЖЕНА");
-        
-        if (db.users.length === 0) {
-            db.users.push({ id: "1000000001", name: "Inker", pass: "admin", created_at: "16.02.2026", last_seen: Date.now(), isVerified: true });
-            fs.writeFileSync(USERS_FILE, JSON.stringify(db.users, null, 2), 'utf8');
-        }
-    } catch (e) {
-        console.error("Критический сбой базы данных:", e);
-        db = { users: [], messages: [], groups: [] };
+const io = new Server(server, {
+    cors: {
+        origin: ALLOWED_ORIGIN,
+        methods: ["GET", "POST"],
+        credentials: true
     }
-};
-
-const saveData = (filePath, dataArray) => {
-    try {
-        fs.writeFileSync(filePath, JSON.stringify(dataArray, null, 2), 'utf8');
-    } catch (e) {
-        console.error(`Не удалось сохранить файл ${filePath}:`, e);
-    }
-};
-
-const updateHeartbeat = (username) => {
-    if (!username) return;
-    let user = db.users.find(u => u.name.toLowerCase() === username.toLowerCase());
-    if (user) user.last_seen = Date.now();
-};
-// --- API: СЕССИЯ И АКТИВНОСТЬ ---
-app.post('/api/heartbeat', (req, res) => {
-    const { username } = req.body;
-    updateHeartbeat(username);
-    res.json({ success: true });
 });
 
-app.post('/api/register', (req, res) => {
-    const { name, pass, id, created_at } = req.body;
-    if (!name || !pass || !id) return res.status(400).json({ error: "Заполните все поля!" });
-    if (db.users.some(u => u.name.toLowerCase() === name.toLowerCase())) {
-        return res.status(400).json({ error: "Это имя уже занято!" });
+const db = new sqlite3.Database(':memory:'); 
+
+app.use(express.json());
+app.use(session({
+    secret: 'secret-key-render-chat',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        sameSite: 'none', // Необходимо для работы сессий между разными доменами
+        secure: true      // Обязательно для HTTPS
     }
+}));
+
+// Инициализация БД
+db.serialize(() => {
+    db.run(`CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT, password TEXT)`);
+    db.run(`CREATE TABLE rooms (id TEXT PRIMARY KEY, name TEXT, is_dm INT)`);
+    db.run(`CREATE TABLE room_members (room_id TEXT, user_id TEXT)`);
+    db.run(`CREATE TABLE messages (id TEXT PRIMARY KEY, room_id TEXT, user_id TEXT, username TEXT, text TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+});
+
+function generateShortId(callback) {
+    const id = Math.floor(10000 + Math.random() * 90000).toString();
+    db.get("SELECT id FROM users WHERE id = ?", [id], (err, row) => {
+        if (row) return generateShortId(callback);
+        callback(id);
+    });
+}
+
+app.post('/api/register', (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: 'Заполните поля' });
     
-    const isVerified = (pass === "Ink_Admin_2552m");
-    const newUser = { id, name, pass, created_at, last_seen: Date.now(), isVerified };
-    db.users.push(newUser);
-    
-    saveData(USERS_FILE, db.users);
-    res.json({ success: true, user: newUser });
+    generateShortId((userId) => {
+        const hashedPassword = bcrypt.hashSync(password, 10);
+        db.run("INSERT INTO users (id, username, password) VALUES (?, ?, ?)", [userId, username, hashedPassword], (err) => {
+            if (err) return res.status(500).json({ error: 'Ошибка регистрации' });
+            req.session.userId = userId;
+            req.session.username = username;
+            res.json({ id: userId, username });
+        });
+    });
 });
 
 app.post('/api/login', (req, res) => {
-    const { name, pass } = req.body;
-    const user = db.users.find(u => u.name.toLowerCase() === name.trim().toLowerCase() && u.pass === pass.trim());
-    if (!user) return res.status(400).json({ error: "Неверные данные для входа!" });
-    user.last_seen = Date.now();
-    res.json({ success: true, user });
-});
-
-app.post('/api/profile/update', (req, res) => {
-    const { userId, newName, newPass } = req.body;
-    if (!userId || !newName || !newPass) return res.status(400).json({ error: "Поля не могут быть пустыми!" });
-    
-    let user = db.users.find(u => String(u.id) === String(userId));
-    if (!user) return res.status(400).json({ error: "Пользователь не найден!" });
-    
-    if (user.name.toLowerCase() !== newName.toLowerCase() && db.users.some(u => u.name.toLowerCase() === newName.toLowerCase())) {
-        return res.status(400).json({ error: "Это имя уже занято!" });
-    }
-    
-    const oldName = user.name;
-    db.messages.forEach(m => {
-        if (m.sender === oldName) m.sender = newName;
-        if (m.recipient === oldName) m.recipient = newName;
-    });
-    db.groups.forEach(g => {
-        if (g.creator === oldName) g.creator = newName;
-        g.members = g.members.map(m => m === oldName ? newName : m);
-    });
-    
-    user.name = newName;
-    user.pass = newPass;
-    if (newPass === "Ink_Admin_2552m") user.isVerified = true;
-    
-    saveData(USERS_FILE, db.users);
-    saveData(MESSAGES_FILE, db.messages);
-    saveData(GROUPS_FILE, db.groups);
-    
-    res.json({ success: true, user });
-});
-
-// --- API: ПОИСК И СТАТУСЫ ---
-app.get('/api/find-user', (req, res) => {
-    const { searchId } = req.query;
-    const match = db.users.find(u => String(u.id).trim() === String(searchId).trim());
-    if (!match) return res.json({ matches: null });
-    
-    const isOnline = match.last_seen ? (Date.now() - match.last_seen) < 10000 : false;
-    res.json({ matches: { ...match, isOnline } });
-});
-
-app.post('/api/users/status', (req, res) => {
-    const { usernames } = req.body;
-    if (!usernames || !Array.isArray(usernames)) return res.json({ statuses: {} });
-    
-    let statuses = {};
-    usernames.forEach(name => {
-        let u = db.users.find(user => user.name.toLowerCase() === name.toLowerCase());
-        if (u) {
-            statuses[name] = {
-                isOnline: u.last_seen ? (Date.now() - u.last_seen) < 10000 : false,
-                isVerified: u.isVerified || false
-            };
+    const { username, password } = req.body;
+    db.get("SELECT * FROM users WHERE username = ?", [username], (err, user) => {
+        if (!user || !bcrypt.compareSync(password, user.password)) {
+            return res.status(400).json({ error: 'Неверные данные' });
         }
+        req.session.userId = user.id;
+        req.session.username = user.username;
+        res.json({ id: user.id, username: user.username });
     });
-    res.json({ statuses });
 });
 
-// --- API: КАТАЛОГ ДИАЛОГОВ ---
-app.get('/api/active-dialogs', (req, res) => {
-    const { username } = req.query;
-    if (!username) return res.json({ dialogs: [] });
-
-    let dialogPartners = new Set();
-    db.messages.forEach(m => {
-        if (m.target && !m.target.startsWith("Группа: ")) {
-            if (m.sender.toLowerCase() === username.toLowerCase() && m.recipient) dialogPartners.add(m.recipient);
-            if (m.recipient && m.recipient.toLowerCase() === username.toLowerCase()) dialogPartners.add(m.sender);
-        }
-    });
-
-    let dialogs = Array.from(dialogPartners).map(name => {
-        let u = db.users.find(user => user.name.toLowerCase() === name.toLowerCase());
-        return { name: name, id: u ? u.id : "", isVerified: u ? u.isVerified : false };
-    });
-
-    res.json({ dialogs });
+app.get('/api/me', (req, res) => {
+    if (!req.session.userId) return res.status(401).json({ error: 'Не авторизован' });
+    res.json({ id: req.session.userId, username: req.session.username });
 });
 
-// --- API: СООБЩЕНИЯ И ГРУППЫ ---
-app.get('/api/messages', (req, res) => res.json({ messages: db.messages }));
+io.on('connection', (socket) => {
+    // Удаление (выход из) чата или ЛС
+    socket.on('delete_room', ({ roomId, userId }) => {
+        // Удаляем пользователя из участников этой комнаты
+        db.run("DELETE FROM room_members WHERE room_id = ? AND user_id = ?", [roomId, userId], () => {
+            
+            // Проверяем, остались ли еще участники в этой комнате
+            db.get("SELECT COUNT(*) as count FROM room_members WHERE room_id = ?", [roomId], (err, row) => {
+                if (!err && row.count === 0) {
+                    // Если участников не осталось, полностью стираем чат и его сообщения
+                    db.run("DELETE FROM rooms WHERE id = ?", [roomId]);
+                    db.run("DELETE FROM messages WHERE room_id = ?", [roomId]);
+                }
+                
+                // Обновляем список чатов у пользователя
+                sendUserRooms(userId);
+                socket.emit('room_deleted_success');
+            });
+        });
+    });
 
-app.post('/api/messages/send', (req, res) => {
-    const { sender, target, recipient, text } = req.body;
-    updateHeartbeat(sender);
-    const newMsg = { id: Date.now(), sender, target, recipient, text, read: false };
-    db.messages.push(newMsg);
+    let currentUserId = null;
+
+    socket.on('auth', (userId) => {
+        currentUserId = userId;
+        socket.join(`user_${userId}`);
+        sendUserRooms(userId);
+    });
+
+    function sendUserRooms(userId) {
+        db.all(`
+            SELECT r.id, r.name, r.is_dm, 
+            (SELECT username FROM users WHERE id = rm2.user_id AND rm2.user_id != ?) as dm_name
+            FROM rooms r
+            JOIN room_members rm ON r.id = rm.room_id
+            LEFT JOIN room_members rm2 ON r.id = rm2.room_id AND r.is_dm = 1
+            WHERE rm.user_id = ?
+        `, [userId, userId], (err, rows) => {
+            if (!err) socket.emit('rooms_list', rows);
+        });
+    }
+
+    socket.on('create_room', ({ name, userId }) => {
+        const roomId = Math.random().toString(36).substring(2, 9);
+        db.run("INSERT INTO rooms (id, name, is_dm) VALUES (?, ?, 0)", [roomId, name], () => {
+            db.run("INSERT INTO room_members (room_id, user_id) VALUES (?, ?)", [roomId, userId], () => {
+                sendUserRooms(userId);
+            });
+        });
+    });
+
+    socket.on('create_dm', ({ targetId, userId }) => {
+        db.get("SELECT username FROM users WHERE id = ?", [targetId], (err, targetUser) => {
+            if (!targetUser || targetId === userId) return socket.emit('error_msg', 'Пользователь не найден');
+            
+            const roomId = [userId, targetId].sort().join('_');
+            db.get("SELECT id FROM rooms WHERE id = ?", [roomId], (err, exists) => {
+                if (exists) return socket.emit('dm_created', roomId);
+
+                db.run("INSERT INTO rooms (id, name, is_dm) VALUES (?, ?, 1)", [roomId, 'DM'], () => {
+                    db.run("INSERT INTO room_members (room_id, user_id) VALUES (?, ?), (?, ?)", [roomId, userId, roomId, targetId], () => {
+                        sendUserRooms(userId);
+                        io.to(`user_${targetId}`).emit('refresh_rooms');
+                        socket.emit('dm_created', roomId);
+                    });
+                });
+            });
+        });
+    });
+
+    socket.on('join_room', (roomId) => {
+        socket.join(roomId);
+        db.all("SELECT * FROM messages WHERE room_id = ? ORDER BY timestamp ASC", [roomId], (err, rows) => {
+            if (!err) socket.emit('messages_list', rows);
+        });
+    });
+
+    socket.on('send_message', ({ roomId, userId, username, text }) => {
+        const msgId = Math.random().toString(36).substring(2, 9);
+        db.run("INSERT INTO messages (id, room_id, user_id, username, text) VALUES (?, ?, ?, ?, ?)", [msgId, roomId, userId, username, text], () => {
+            io.to(roomId).emit('new_message', { id: msgId, room_id: roomId, user_id: userId, username, text });
+        });
+    });
+
+    socket.on('edit_message', ({ msgId, roomId, userId, newText }) => {
+        db.run("UPDATE messages SET text = ? WHERE id = ? AND user_id = ?", [newText, msgId, userId], () => {
+            io.to(roomId).emit('message_edited', { id: msgId, text: newText });
+        });
+    });
+
+    socket.on('delete_message', ({ msgId, roomId, userId }) => {
+        db.run("DELETE FROM messages WHERE id = ? AND user_id = ?", [msgId, userId], () => {
+            io.to(roomId).emit('message_deleted', msgId);
+        });
+    });
     
-    saveData(MESSAGES_FILE, db.messages);
-    res.json({ success: true });
+    socket.on('refresh_rooms', () => { if(currentUserId) sendUserRooms(currentUserId); });
 });
-
-app.post('/api/messages/read', (req, res) => {
-    const { chatTarget, username } = req.body;
-    updateHeartbeat(username);
-    let changed = false;
-    db.messages.forEach(m => {
-        if (m.target === chatTarget && m.sender.toLowerCase() !== username.toLowerCase() && !m.read) {
-            m.read = true;
-            changed = true;
-        }
-    });
-    if (changed) saveData(MESSAGES_FILE, db.messages);
-    res.json({ success: true });
-});
-
-app.post('/api/messages/delete', (req, res) => {
-    const { id, username } = req.body;
-    let msg = db.messages.find(m => String(m.id) === String(id));
-    if (msg && msg.sender === username) {
-        db.messages = db.messages.filter(m => String(m.id) !== String(id));
-        saveData(MESSAGES_FILE, db.messages);
-        return res.json({ success: true });
-    }
-    res.status(400).json({ error: "Нельзя удалить это сообщение" });
-});
-
-app.post('/api/messages/edit', (req, res) => {
-    const { id, username, newText } = req.body;
-    let msg = db.messages.find(m => String(m.id) === String(id));
-    if (msg && msg.sender === username) {
-        msg.text = newText;
-        saveData(MESSAGES_FILE, db.messages);
-        return res.json({ success: true });
-    }
-    res.status(400).json({ error: "Нельзя изменить это сообщение" });
-});
-
-app.get('/api/groups', (req, res) => res.json({ groups: db.groups }));
-
-app.post('/api/groups/create', (req, res) => {
-    const { gName, creator, members } = req.body;
-    if (db.groups.some(g => g.name.toLowerCase() === gName.toLowerCase())) {
-        return res.status(400).json({ error: "Группа уже существует!" });
-    }
-    db.groups.push({ name: gName, creator, members });
-    db.messages.push({ id: Date.now(), sender: "Система", target: "Группа: " + gName, recipient: null, text: `Группа создана пользователем ${creator}`, read: true });
-    
-    saveData(GROUPS_FILE, db.groups);
-    saveData(MESSAGES_FILE, db.messages);
-    res.json({ success: true });
-});
-
-// Запуск базы данных и прослушивания порта
-loadDatabase();
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Сервер запущен на порту ${PORT}`));
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
