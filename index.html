@@ -159,7 +159,8 @@
     </div>
 
     <script>
-        const BACKEND_URL = 'https://onrender.com';
+        const BACKEND_URL = 'https://ink-chat-dppr.onrender.com';
+
 
         function getCurrentUser() { try { return JSON.parse(sessionStorage.getItem('ink_current_user')); } catch(e){return null;} }
         function getMyFriends() { try { return JSON.parse(localStorage.getItem('ink_friends') || '[]'); } catch(e){return [];} }
