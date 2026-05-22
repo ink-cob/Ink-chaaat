@@ -61,7 +61,6 @@
         .msg-bubble.incoming { background: var(--tg-other-msg); align-self: flex-start; border-bottom-left-radius: 4px; }
         .msg-bubble.outgoing { background: var(--tg-my-msg); align-self: flex-end; border-bottom-right-radius: 4px; }
         .msg-author { font-size: 12px; font-weight: bold; margin-bottom: 2px; color: var(--tg-active-item); }
-        .msg-actions { font-size: 11px; margin-top: 4px; display: flex; gap: 8px; justify-content: flex-end; opacity: 0.6; cursor: pointer; }
         .chat-input-area { display: flex; padding: 10px; background: var(--tg-bg); border-top: 1px solid var(--tg-border); gap: 8px; }
         .chat-input-area input { margin: 0; }
         .chat-input-area .btn-tg { width: auto; margin: 0; padding: 0 20px; }
@@ -117,7 +116,7 @@
         <div class="window-box" id="win-messages" style="max-width: 700px;">
             <h2>Диалоги</h2>
             <div class="input-group">
-                <label>Выберите чат</label>
+                <label>Выберите активный чат</label>
                 <select id="select-active-chat" onchange="uiUpdateMessages()"></select>
             </div>
             <div class="chat-container">
@@ -126,7 +125,6 @@
                     <input type="hidden" id="edit-msg-id">
                     <input type="text" id="message-input" placeholder="Напишите сообщение...">
                     <button class="btn-tg" id="btn-send-msg" onclick="actionSendMessage()">Отправить</button>
-                    <button class="btn-tg" id="btn-save-edit-msg" style="display:none;" onclick="actionSaveEditedMessage()">Сохранить</button>
                 </div>
             </div>
         </div>
@@ -140,10 +138,10 @@
 
         <!-- ОКНО СОЗДАНИЯ ГРУППЫ -->
         <div class="window-box" id="win-group-create">
-            <h2>Создание группы</h2>
+            <h2>Создание приватной группы</h2>
             <div class="input-group"><label>Название группы</label><input type="text" id="new-group-name" placeholder="Например: Семья"></div>
             <div class="input-group">
-                <label>Выберите участников</label>
+                <label>Выберите участников из списка друзей</label>
                 <div class="checkbox-group-box" id="group-friends-checkboxes"></div>
             </div>
             <button class="btn-tg" onclick="actionCreateGroup()">Объединить в группу</button>
@@ -160,8 +158,8 @@
         </div>
     </div>
 
-       <script>
-        const BACKEND_URL = 'https://ink-cob.github.io/Ink-chaaat';
+    <script>
+        const BACKEND_URL = 'https://onrender.com';
 
         function getCurrentUser() { try { return JSON.parse(sessionStorage.getItem('ink_current_user')); } catch(e){return null;} }
         function getMyFriends() { try { return JSON.parse(localStorage.getItem('ink_friends') || '[]'); } catch(e){return [];} }
@@ -483,25 +481,6 @@
             let u = getCurrentUser(); if(!u) return;
             if(document.getElementById('win-messages').classList.contains('active')) { uiUpdateMessages(); }
         }, 4000);
-    </script>
-
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const themeToggleBtn = document.getElementById('theme-toggle');
-            if (!themeToggleBtn) return;
-
-            const savedTheme = localStorage.getItem('ink_theme') || 'light';
-            document.documentElement.setAttribute('data-theme', savedTheme);
-            themeToggleBtn.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
-
-            themeToggleBtn.addEventListener('click', () => {
-                const currentTheme = document.documentElement.getAttribute('data-theme');
-                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-                document.documentElement.setAttribute('data-theme', newTheme);
-                localStorage.setItem('ink_theme', newTheme);
-                themeToggleBtn.textContent = newTheme === 'dark' ? '☀️' : '🌙';
-            });
-        });
     </script>
 
     <script>
