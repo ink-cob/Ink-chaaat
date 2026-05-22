@@ -212,6 +212,7 @@
             document.getElementById('edit-profile-password').value = u.pass;
         }
 
+                // --- ИСПРАВЛЕННЫЕ ФУНКЦИИ С ЖЕСТКИМИ АБСОЛЮТНЫМИ ПУТЯМИ ---
         async function actionRegister() {
             const name = document.getElementById('reg-username').value.trim();
             const pass = document.getElementById('reg-password').value.trim();
@@ -223,7 +224,8 @@
             const today = new Date().toLocaleDateString('ru-RU');
 
             try {
-                const res = await fetch(`${BACKEND_URL}/api/register`, {
+                // ИСПРАВЛЕНО: Полная абсолютная ссылка, чтобы исключить запросы к GitHub
+                const res = await fetch('https://onrender.com', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id: randID, name, pass, created_at: today })
@@ -235,7 +237,7 @@
                 uiSyncUserLabel();
                 showPushNotification(`Аккаунт создан! ID: ${randID}`);
                 switchWindow('win-messages');
-            } catch (err) { alert("Сервер бэкенда недоступен"); }
+            } catch (err) { alert("Сервер бэкенда недоступен: " + err.message); }
         }
 
         async function actionLogin() {
@@ -244,7 +246,8 @@
             if(!name || !pass) return alert("Заполните все поля!");
             
             try {
-                const res = await fetch(`${BACKEND_URL}/api/login`, {
+                // ИСПРАВЛЕНО: Полная абсолютная ссылка
+                const res = await fetch('https://onrender.com', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name, pass })
@@ -256,7 +259,7 @@
                 uiSyncUserLabel();
                 showPushNotification(`Вы вошли как ${data.user.name}`);
                 switchWindow('win-messages');
-            } catch (err) { alert("Сервер бэкенда недоступен"); }
+            } catch (err) { alert("Сервер бэкенда недоступен: " + err.message); }
         }
 
         async function actionFindFriend() {
@@ -268,7 +271,8 @@
             if (String(searchId) === String(currentUser.id)) return alert("Это ваш собственный ID!");
 
             try {
-                const res = await fetch(`${BACKEND_URL}/api/find-user?searchId=${searchId}`);
+                // ИСПРАВЛЕНО: Полная абсолютная ссылка
+                const res = await fetch('https://onrender.com' + searchId);
                 const data = await res.json();
                 if (!data.matches) return alert("Пользователь не найден!");
 
@@ -280,8 +284,9 @@
                 document.getElementById('search-friend-name').value = '';
                 showPushNotification(`Контакт "${target.name}" добавлен!`);
                 uiUpdateChatSelection();
-            } catch (err) { alert("Ошибка поиска на сервере"); }
+            } catch (err) { alert("Ошибка поиска на сервере: " + err.message); }
         }
+
 
         async function actionSaveProfile() {
             let u = getCurrentUser();
