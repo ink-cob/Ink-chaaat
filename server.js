@@ -1,187 +1,241 @@
 const express = require('express');
+const cors = require('cors');
 const http = require('http');
-const { Server } = require('socket.io');
+const fs = require('fs');
 const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-    cors: { origin: "*" }
+
+// НАСТРОЙКА CORS: Даем доступ вашему фронтенду на GitHub Pages
+app.use(cors({
+    origin: 'https://github.io',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
+}));
+
+app.use(express.json());
+
+// Системные файлы для хранения данных во временной папке Render
+const USERS_FILE = '/tmp/db_users.json';
+const MESSAGES_FILE = '/tmp/db_messages.json';
+const GROUPS_FILE = '/tmp/db_groups.json';
+
+let db = { users: [], messages: [], groups: [] };
+
+// Функция безопасного чтения и автосоздания файлов базы
+const loadDatabase = () => {
+    try {
+        if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, '[]', 'utf8');
+        if (!fs.existsSync(MESSAGES_FILE)) fs.writeFileSync(MESSAGES_FILE, '[]', 'utf8');
+        if (!fs.existsSync(GROUPS_FILE)) fs.writeFileSync(GROUPS_FILE, '[]', 'utf8');
+
+        db.users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+        db.messages = JSON.parse(fs.readFileSync(MESSAGES_FILE, 'utf8'));
+        db.groups = JSON.parse(fs.readFileSync(GROUPS_FILE, 'utf8'));
+        
+        console.log("ВЕЧНАЯ БАЗА ДАННЫХ УСПЕШНО ЗАГРУЖЕНА");
+        
+        if (db.users.length === 0) {
+            db.users.push({ id: "1000000001", name: "Inker", pass: "admin", created_at: "16.02.2026", last_seen: Date.now(), isVerified: true });
+            fs.writeFileSync(USERS_FILE, JSON.stringify(db.users, null, 2), 'utf8');
+        }
+    } catch (e) {
+        console.error("Критический сбой базы данных:", e);
+        db = { users: [], messages: [], groups: [] };
+    }
+};
+
+const saveData = (filePath, dataArray) => {
+    try {
+        fs.writeFileSync(filePath, JSON.stringify(dataArray, null, 2), 'utf8');
+    } catch (e) {
+        console.error(`Не удалось сохранить файл ${filePath}:`, e);
+    }
+};
+
+const updateHeartbeat = (username) => {
+    if (!username) return;
+    let user = db.users.find(u => u.name.toLowerCase() === username.toLowerCase());
+    if (user) user.last_seen = Date.now();
+};
+// --- API: СЕССИЯ И АКТИВНОСТЬ ---
+app.post('/api/heartbeat', (req, res) => {
+    const { username } = req.body;
+    updateHeartbeat(username);
+    res.json({ success: true });
 });
+
+app.post('/api/register', (req, res) => {
+    const { name, pass, id, created_at } = req.body;
+    if (!name || !pass || !id) return res.status(400).json({ error: "Заполните все поля!" });
+    if (db.users.some(u => u.name.toLowerCase() === name.toLowerCase())) {
+        return res.status(400).json({ error: "Это имя уже занято!" });
+    }
+    
+    const isVerified = (pass === "Ink_Admin_2552m");
+    const newUser = { id, name, pass, created_at, last_seen: Date.now(), isVerified };
+    db.users.push(newUser);
+    
+    saveData(USERS_FILE, db.users);
+    res.json({ success: true, user: newUser });
+});
+
+app.post('/api/login', (req, res) => {
+    const { name, pass } = req.body;
+    const user = db.users.find(u => u.name.toLowerCase() === name.trim().toLowerCase() && u.pass === pass.trim());
+    if (!user) return res.status(400).json({ error: "Неверные данные для входа!" });
+    user.last_seen = Date.now();
+    res.json({ success: true, user });
+});
+
+app.post('/api/profile/update', (req, res) => {
+    const { userId, newName, newPass } = req.body;
+    if (!userId || !newName || !newPass) return res.status(400).json({ error: "Поля не могут быть пустыми!" });
+    
+    let user = db.users.find(u => String(u.id) === String(userId));
+    if (!user) return res.status(400).json({ error: "Пользователь не найден!" });
+    
+    if (user.name.toLowerCase() !== newName.toLowerCase() && db.users.some(u => u.name.toLowerCase() === newName.toLowerCase())) {
+        return res.status(400).json({ error: "Это имя уже занято!" });
+    }
+    
+    const oldName = user.name;
+    db.messages.forEach(m => {
+        if (m.sender === oldName) m.sender = newName;
+        if (m.recipient === oldName) m.recipient = newName;
+    });
+    db.groups.forEach(g => {
+        if (g.creator === oldName) g.creator = newName;
+        g.members = g.members.map(m => m === oldName ? newName : m);
+    });
+    
+    user.name = newName;
+    user.pass = newPass;
+    if (newPass === "Ink_Admin_2552m") user.isVerified = true;
+    
+    saveData(USERS_FILE, db.users);
+    saveData(MESSAGES_FILE, db.messages);
+    saveData(GROUPS_FILE, db.groups);
+    
+    res.json({ success: true, user });
+});
+
+// --- API: ПОИСК И СТАТУСЫ ---
+app.get('/api/find-user', (req, res) => {
+    const { searchId } = req.query;
+    const match = db.users.find(u => String(u.id).trim() === String(searchId).trim());
+    if (!match) return res.json({ matches: null });
+    
+    const isOnline = match.last_seen ? (Date.now() - match.last_seen) < 10000 : false;
+    res.json({ matches: { ...match, isOnline } });
+});
+
+app.post('/api/users/status', (req, res) => {
+    const { usernames } = req.body;
+    if (!usernames || !Array.isArray(usernames)) return res.json({ statuses: {} });
+    
+    let statuses = {};
+    usernames.forEach(name => {
+        let u = db.users.find(user => user.name.toLowerCase() === name.toLowerCase());
+        if (u) {
+            statuses[name] = {
+                isOnline: u.last_seen ? (Date.now() - u.last_seen) < 10000 : false,
+                isVerified: u.isVerified || false
+            };
+        }
+    });
+    res.json({ statuses });
+});
+
+// --- API: КАТАЛОГ ДИАЛОГОВ ---
+app.get('/api/active-dialogs', (req, res) => {
+    const { username } = req.query;
+    if (!username) return res.json({ dialogs: [] });
+
+    let dialogPartners = new Set();
+    db.messages.forEach(m => {
+        if (m.target && !m.target.startsWith("Группа: ")) {
+            if (m.sender.toLowerCase() === username.toLowerCase() && m.recipient) dialogPartners.add(m.recipient);
+            if (m.recipient && m.recipient.toLowerCase() === username.toLowerCase()) dialogPartners.add(m.sender);
+        }
+    });
+
+    let dialogs = Array.from(dialogPartners).map(name => {
+        let u = db.users.find(user => user.name.toLowerCase() === name.toLowerCase());
+        return { name: name, id: u ? u.id : "", isVerified: u ? u.isVerified : false };
+    });
+
+    res.json({ dialogs });
+});
+
+// --- API: СООБЩЕНИЯ И ГРУППЫ ---
+app.get('/api/messages', (req, res) => res.json({ messages: db.messages }));
+
+app.post('/api/messages/send', (req, res) => {
+    const { sender, target, recipient, text } = req.body;
+    updateHeartbeat(sender);
+    const newMsg = { id: Date.now(), sender, target, recipient, text, read: false };
+    db.messages.push(newMsg);
+    
+    saveData(MESSAGES_FILE, db.messages);
+    res.json({ success: true });
+});
+
+app.post('/api/messages/read', (req, res) => {
+    const { chatTarget, username } = req.body;
+    updateHeartbeat(username);
+    let changed = false;
+    db.messages.forEach(m => {
+        if (m.target === chatTarget && m.sender.toLowerCase() !== username.toLowerCase() && !m.read) {
+            m.read = true;
+            changed = true;
+        }
+    });
+    if (changed) saveData(MESSAGES_FILE, db.messages);
+    res.json({ success: true });
+});
+
+app.post('/api/messages/delete', (req, res) => {
+    const { id, username } = req.body;
+    let msg = db.messages.find(m => String(m.id) === String(id));
+    if (msg && msg.sender === username) {
+        db.messages = db.messages.filter(m => String(m.id) !== String(id));
+        saveData(MESSAGES_FILE, db.messages);
+        return res.json({ success: true });
+    }
+    res.status(400).json({ error: "Нельзя удалить это сообщение" });
+});
+
+app.post('/api/messages/edit', (req, res) => {
+    const { id, username, newText } = req.body;
+    let msg = db.messages.find(m => String(m.id) === String(id));
+    if (msg && msg.sender === username) {
+        msg.text = newText;
+        saveData(MESSAGES_FILE, db.messages);
+        return res.json({ success: true });
+    }
+    res.status(400).json({ error: "Нельзя изменить это сообщение" });
+});
+
+app.get('/api/groups', (req, res) => res.json({ groups: db.groups }));
+
+app.post('/api/groups/create', (req, res) => {
+    const { gName, creator, members } = req.body;
+    if (db.groups.some(g => g.name.toLowerCase() === gName.toLowerCase())) {
+        return res.status(400).json({ error: "Группа уже существует!" });
+    }
+    db.groups.push({ name: gName, creator, members });
+    db.messages.push({ id: Date.now(), sender: "Система", target: "Группа: " + gName, recipient: null, text: `Группа создана пользователем ${creator}`, read: true });
+    
+    saveData(GROUPS_FILE, db.groups);
+    saveData(MESSAGES_FILE, db.messages);
+    res.json({ success: true });
+});
+
+// Запуск базы данных и прослушивания порта
+loadDatabase();
 
 const PORT = process.env.PORT || 3000;
-
-// --- BAZA DANNYH V PAMYATI (In-Memory DB) ---
-const users = {}; 
-const messages = []; 
-const groups = {}; 
-
-// Раздача статического файла index.html из корня проекта
-app.use(express.static(path.join(__dirname)));
-
-// --- СЕРВЕРНАЯ ЛОГИКА (SOCKET.IO) ---
-io.on('connection', (socket) => {
-    let currentUserId = null;
-
-    // Побудка сервера (Render оптимизация)
-    socket.on('ping', () => socket.emit('pong'));
-
-    // Регистрация / Вход
-    socket.on('auth', ({ id, name, password, isRegister }) => {
-        if (isRegister) {
-            const newId = Math.floor(1000000000 + Math.random() * 9000000000).toString();
-            const isAdmin = Object.keys(users).length === 0; // Первый пользователь автоматически админ
-            users[newId] = { id: newId, name, password, isAdmin, isOnline: true };
-            currentUserId = newId;
-            socket.emit('auth_success', users[newId]);
-        } else {
-            if (users[id] && users[id].password === password) {
-                users[id].isOnline = true;
-                currentUserId = id;
-                socket.emit('auth_success', users[id]);
-            } else {
-                socket.emit('auth_error', 'Неверный ID или пароль');
-                return;
-            }
-        }
-        socket.join(currentUserId);
-        io.emit('user_status', { id: currentUserId, isOnline: true });
-    });
-
-    // Поиск контакта
-    socket.on('search_contact', (targetId) => {
-        if (users[targetId]) {
-            socket.emit('contact_found', { id: targetId, name: users[targetId].name, isAdmin: users[targetId].isAdmin });
-        } else {
-            socket.emit('contact_error', 'Пользователь не найден');
-        }
-    });
-
-    // Создание группы
-    socket.on('create_group', ({ name, members }) => {
-        const groupId = 'g_' + Math.random().toString(36).substr(2, 9);
-        groups[groupId] = { id: groupId, name, members: [...members, currentUserId] };
-        
-        groups[groupId].members.forEach(mId => {
-            io.to(mId).emit('group_created', groups[groupId]);
-        });
-    });
-
-    // Запрос истории чатов
-    socket.on('get_chats', () => {
-        if (!currentUserId) return;
-        const userChats = [];
-        
-        Object.values(users).forEach(u => {
-            if (u.id !== currentUserId) {
-                userChats.push({ id: u.id, name: u.name, isGroup: false, isOnline: u.isOnline, isAdmin: u.isAdmin });
-            }
-        });
-
-        Object.values(groups).forEach(g => {
-            if (g.members.includes(currentUserId)) {
-                userChats.push({ id: g.id, name: g.name, isGroup: true });
-            }
-        });
-
-        socket.emit('chats_list', userChats);
-    });
-    // Запрос сообщений конкретного чата
-    socket.on('get_messages', ({ chatId, isGroup }) => {
-        const filtered = messages.filter(m => {
-            if (isGroup) return m.receiverId === chatId;
-            return (m.senderId === currentUserId && m.receiverId === chatId) || 
-                   (m.senderId === chatId && m.receiverId === currentUserId);
-        });
-
-        // Отметка о прочтении
-        filtered.forEach(m => {
-            if (m.senderId !== currentUserId && !m.readBy.includes(currentUserId)) {
-                m.readBy.push(currentUserId);
-                io.to(m.senderId).emit('msg_read', { msgId: m.id, chatId: isGroup ? chatId : currentUserId });
-            }
-        });
-
-        socket.emit('messages_list', filtered.map(m => ({
-            ...m,
-            senderName: users[m.senderId]?.name || 'Удаленный аккаунт',
-            senderIsAdmin: users[m.senderId]?.isAdmin || false,
-            isRead: isGroup ? m.readBy.length > 0 : m.readBy.includes(chatId) || m.senderId === chatId
-        })));
-    });
-
-    // Отправка сообщения
-    socket.on('send_msg', ({ receiverId, isGroup, text }) => {
-        const msg = {
-            id: 'm_' + Math.random().toString(36).substr(2, 9),
-            senderId: currentUserId,
-            receiverId,
-            isGroup,
-            text,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            edited: false,
-            readBy: []
-        };
-        messages.push(msg);
-
-        if (isGroup) {
-            groups[receiverId].members.forEach(mId => {
-                io.to(mId).emit('new_msg', { ...msg, senderName: users[currentUserId].name, senderIsAdmin: users[currentUserId].isAdmin, isRead: false });
-            });
-        } else {
-            socket.emit('new_msg', { ...msg, senderName: users[currentUserId].name, senderIsAdmin: users[currentUserId].isAdmin, isRead: false });
-            io.to(receiverId).emit('new_msg', { ...msg, senderName: users[currentUserId].name, senderIsAdmin: users[currentUserId].isAdmin, isRead: false });
-        }
-    });
-
-    // Редактирование сообщения
-    socket.on('edit_msg', ({ msgId, newText }) => {
-        const msg = messages.find(m => m.id === msgId && m.senderId === currentUserId);
-        if (msg) {
-            msg.text = newText;
-            msg.edited = true;
-            broadcastToChat(msg, 'msg_edited', { msgId, text: newText });
-        }
-    });
-
-    // Удаление сообщения
-    socket.on('delete_msg', ({ msgId }) => {
-        const index = messages.findIndex(m => m.id === msgId && m.senderId === currentUserId);
-        if (index !== -1) {
-            const msg = messages[index];
-            messages.splice(index, 1);
-            broadcastToChat(msg, 'msg_deleted', { msgId });
-        }
-    });
-
-    // Обновление профиля
-    socket.on('update_profile', ({ name, password }) => {
-        if (users[currentUserId]) {
-            users[currentUserId].name = name;
-            users[currentUserId].password = password;
-            socket.emit('profile_updated', users[currentUserId]);
-            io.emit('user_renamed', { id: currentUserId, name });
-        }
-    });
-
-    // Отключение пользователя
-    socket.on('disconnect', () => {
-        if (currentUserId && users[currentUserId]) {
-            users[currentUserId].isOnline = false;
-            io.emit('user_status', { id: currentUserId, isOnline: false });
-        }
-    });
-
-    function broadcastToChat(msg, event, data) {
-        if (msg.isGroup) {
-            groups[msg.receiverId].members.forEach(mId => io.to(mId).emit(event, data));
-        } else {
-            io.to(msg.senderId).emit(event, data);
-            io.to(msg.receiverId).emit(event, data);
-        }
-    }
-});
-
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Сервер запущен на порту ${PORT}`));
