@@ -105,7 +105,7 @@
             </div>
             <div id="reg-form-block" style="display:none;">
                 <div class="input-group"><label>Придумайте имя</label><input type="text" id="reg-username"></div>
-                <div class="input-group"><label>Пароль (Админ код: Ink_Admin_2552m)</label><input type="password" id="reg-password"></div>
+                <div class="input-group"><label>Пароль</label><input type="password" id="reg-password"></div>
                 <div class="input-group"><label>Повторите пароль</label><input type="password" id="reg-password-confirm"></div>
                 <button class="btn-tg btn-tg-secondary" id="btn-toggle-reg-pass" onclick="toggleRegisterPassword()" style="margin-bottom:10px; padding:6px; font-size:12px;">👁️ Показать код</button>
                 <button class="btn-tg" onclick="actionRegister()">Создать аккаунт</button>
@@ -140,7 +140,7 @@
 
         <!-- ОКНО СОЗДАНИЯ ГРУППЫ -->
         <div class="window-box" id="win-group-create">
-            <h2>Создание приватной группы</h2>
+            <h2>Создание группы</h2>
             <div class="input-group"><label>Название группы</label><input type="text" id="new-group-name" placeholder="Например: Семья"></div>
             <div class="input-group">
                 <label>Выберите участников</label>
@@ -161,7 +161,7 @@
     </div>
 
        <script>
-        const BACKEND_URL = 'https://onrender.com';
+        const BACKEND_URL = 'https://ink-chat-dppr.onrender.com';
 
         function getCurrentUser() { try { return JSON.parse(sessionStorage.getItem('ink_current_user')); } catch(e){return null;} }
         function getMyFriends() { try { return JSON.parse(localStorage.getItem('ink_friends') || '[]'); } catch(e){return [];} }
