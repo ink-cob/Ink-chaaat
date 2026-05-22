@@ -7,8 +7,25 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 
-app.use(cors());
+// Настройка CORS (Вставлять строго перед express.json)
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
+
+// Дополнительный ручной шлюз для обработки предварительных запросов браузера (Preflight)
+app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
+    next();
+});
 
 // Системная временная папка, в которой на Render разрешена запись файлов
 const USERS_FILE = '/tmp/db_users.json';
@@ -40,7 +57,6 @@ const loadDatabase = () => {
     }
 };
 
-// Функция мгновенной записи изменений на диск
 const saveData = (filePath, dataArray) => {
     try {
         fs.writeFileSync(filePath, JSON.stringify(dataArray, null, 2), 'utf8');
@@ -85,7 +101,6 @@ app.post('/api/login', (req, res) => {
     res.json({ success: true, user });
 });
 
-// ИСПРАВЛЕНО: Полное сохранение изменений профиля на сервере
 app.post('/api/profile/update', (req, res) => {
     const { userId, newName, newPass } = req.body;
     if (!userId || !newName || !newPass) return res.status(400).json({ error: "Поля не могут быть пустыми!" });
@@ -193,7 +208,6 @@ app.post('/api/messages/read', (req, res) => {
     res.json({ success: true });
 });
 
-// ИСПРАВЛЕНО: Исправлено удаление сообщений и синхронизация с диском
 app.post('/api/messages/delete', (req, res) => {
     const { id, username } = req.body;
     let msg = db.messages.find(m => String(m.id) === String(id));
@@ -205,7 +219,6 @@ app.post('/api/messages/delete', (req, res) => {
     res.status(400).json({ error: "Нельзя удалить это сообщение" });
 });
 
-// ИСПРАВЛЕНО: Исправлено изменение текста сообщений и синхронизация с диском
 app.post('/api/messages/edit', (req, res) => {
     const { id, username, newText } = req.body;
     let msg = db.messages.find(m => String(m.id) === String(id));
