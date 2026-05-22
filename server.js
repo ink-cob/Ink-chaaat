@@ -7,34 +7,24 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 
-// Настройка CORS (Вставлять строго перед express.json)
+// НАСТРОЙКА CORS: Разрешаем вашему фронтенду на GitHub Pages доступ к бэкенду
 app.use(cors({
-    origin: '*',
+    origin: 'https://github.io',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
 }));
 
 app.use(express.json());
 
-// Дополнительный ручной шлюз для обработки предварительных запросов браузера (Preflight)
-app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    if (req.method === 'OPTIONS') {
-        return res.sendStatus(200);
-    }
-    next();
-});
-
-// Системная временная папка, в которой на Render разрешена запись файлов
+// Системная временная папка Render для базы данных
 const USERS_FILE = '/tmp/db_users.json';
 const MESSAGES_FILE = '/tmp/db_messages.json';
 const GROUPS_FILE = '/tmp/db_groups.json';
 
 let db = { users: [], messages: [], groups: [] };
 
-// Функция безопасного чтения и автоматического создания базы данных
+// Функция безопасного чтения базы данных
 const loadDatabase = () => {
     try {
         if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, '[]', 'utf8');
@@ -71,7 +61,7 @@ const updateHeartbeat = (username) => {
     if (user) user.last_seen = Date.now();
 };
 
-// --- API: СЕССИЯ И АКТИВНОСТЬ ---
+// --- API ЭНДПОИНТЫ ---
 app.post('/api/heartbeat', (req, res) => {
     const { username } = req.body;
     updateHeartbeat(username);
@@ -133,7 +123,6 @@ app.post('/api/profile/update', (req, res) => {
     res.json({ success: true, user });
 });
 
-// --- API: ПОИСК И СТАТУСЫ ---
 app.get('/api/find-user', (req, res) => {
     const { searchId } = req.query;
     const match = db.users.find(u => String(u.id).trim() === String(searchId).trim());
@@ -160,7 +149,6 @@ app.post('/api/users/status', (req, res) => {
     res.json({ statuses });
 });
 
-// --- API: КАТАЛОГ ДИАЛОГОВ ---
 app.get('/api/active-dialogs', (req, res) => {
     const { username } = req.query;
     if (!username) return res.json({ dialogs: [] });
@@ -181,7 +169,6 @@ app.get('/api/active-dialogs', (req, res) => {
     res.json({ dialogs });
 });
 
-// --- API: СООБЩЕНИЯ И ГРУППЫ ---
 app.get('/api/messages', (req, res) => res.json({ messages: db.messages }));
 
 app.post('/api/messages/send', (req, res) => {
@@ -248,4 +235,4 @@ app.post('/api/groups/create', (req, res) => {
 loadDatabase();
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Сервер успешно запущен`));
+app.listen(PORT, () => console.log(`Сервер успешно запущен на порту ${PORT}`));

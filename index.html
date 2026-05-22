@@ -1,161 +1,5 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ink chat</title>
-    <style>
-        :root {
-            --tg-bg: #ffffff;
-            --tg-sidebar-bg: #ffffff;
-            --tg-active-item: #2f8ccd;
-            --tg-text: #000000;
-            --tg-text-muted: #707579;
-            --tg-border: #dfdfdf;
-            --tg-btn-hover: #f4f4f5;
-            --tg-chat-bg: #f4f4f5;
-            --tg-my-msg: #eeffde;
-            --tg-other-msg: #ffffff;
-            --tg-danger: #e53935;
-        }
-        :root[data-theme="dark"] {
-            --tg-bg: #182533;
-            --tg-sidebar-bg: #17212b;
-            --tg-active-item: #5288c1;
-            --tg-text: #f5f5f5;
-            --tg-text-muted: #7f91a4;
-            --tg-border: #101921;
-            --tg-btn-hover: #202b36;
-            --tg-chat-bg: #0e1621;
-            --tg-my-msg: #2b5278;
-            --tg-other-msg: #182533;
-            --tg-danger: #ec3942;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
-        body { display: flex; height: 100vh; background: var(--tg-bg); color: var(--tg-text); overflow: hidden; position: relative; }
-        #mobile-menu-toggle { display: none; position: absolute; top: 12px; left: 12px; z-index: 100; background: var(--tg-active-item); color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; }
-        #left-menu { width: 320px; min-width: 320px; background: var(--tg-sidebar-bg); border-right: 1px solid var(--tg-border); display: flex; flex-direction: column; z-index: 10; }
-        .sidebar-header { padding: 16px; border-bottom: 1px solid var(--tg-border); }
-        .sidebar-header h2 { font-size: 20px; color: var(--tg-active-item); margin-bottom: 4px; }
-        .user-badge { font-size: 13px; color: var(--tg-text-muted); }
-        .theme-toggle-btn { background: none; border: none; font-size: 20px; cursor: pointer; padding: 4px 8px; border-radius: 5px; }
-        .menu-scroll { flex: 1; overflow-y: auto; padding: 8px 0; }
-        .menu-section-title { font-size: 12px; font-weight: bold; text-transform: uppercase; color: var(--tg-active-item); padding: 12px 20px 6px 20px; }
-        .menu-btn { width: 100%; padding: 12px 20px; border: none; background: transparent; color: var(--tg-text); cursor: pointer; text-align: left; font-size: 14px; display: flex; align-items: center; justify-content: space-between; }
-        .menu-btn:hover { background: var(--tg-btn-hover); }
-        .menu-btn.active-tab { background: var(--tg-btn-hover); color: var(--tg-active-item); border-left: 3px solid var(--tg-active-item); }
-        #workspace { flex: 1; background: var(--tg-chat-bg); display: flex; justify-content: center; align-items: center; padding: 20px; width: 100%; }
-        .window-box { background: var(--tg-bg); padding: 32px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); width: 100%; max-width: 460px; display: none; max-height: 90vh; overflow-y: auto; }
-        .window-box.active { display: block; }
-        .input-group { margin-bottom: 14px; }
-        .input-group label { display: block; font-size: 12px; color: var(--tg-text-muted); margin-bottom: 4px; }
-        input, select { width: 100%; padding: 11px 16px; border: 1px solid var(--tg-border); border-radius: 8px; font-size: 14px; background: var(--tg-sidebar-bg); color: var(--tg-text); outline: none; }
-        .checkbox-group-box { max-height: 120px; overflow-y: auto; border: 1px solid var(--tg-border); border-radius: 8px; padding: 10px; background: var(--tg-chat-bg); }
-        .checkbox-item { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 14px; }
-        .btn-tg { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; background: var(--tg-active-item); color: white; margin-top: 8px; }
-        .btn-tg-secondary { background: transparent; color: var(--tg-active-item); border: 1px solid var(--tg-border); }
-        .switch-auth-mode { text-align: center; margin-top: 16px; font-size: 13px; color: var(--tg-active-item); cursor: pointer; }
-        .chat-container { display: flex; flex-direction: column; height: 450px; background: var(--tg-chat-bg); border: 1px solid var(--tg-border); border-radius: 12px; overflow: hidden; width: 100%; }
-        .chat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
-        .msg-bubble { max-width: 75%; padding: 8px 14px; border-radius: 12px; font-size: 14px; color: var(--tg-text); position: relative; }
-        .msg-bubble.incoming { background: var(--tg-other-msg); align-self: flex-start; border-bottom-left-radius: 4px; }
-        .msg-bubble.outgoing { background: var(--tg-my-msg); align-self: flex-end; border-bottom-right-radius: 4px; }
-        .msg-author { font-size: 12px; font-weight: bold; margin-bottom: 2px; color: var(--tg-active-item); }
-        .msg-actions { font-size: 11px; margin-top: 4px; display: flex; gap: 8px; justify-content: flex-end; opacity: 0.6; cursor: pointer; }
-        .chat-input-area { display: flex; padding: 10px; background: var(--tg-bg); border-top: 1px solid var(--tg-border); gap: 8px; }
-        .chat-input-area input { margin: 0; }
-        .chat-input-area .btn-tg { width: auto; margin: 0; padding: 0 20px; }
-        #push-notification { position: fixed; top: -100px; left: 50%; transform: translateX(-50%); background: #323232; color: white; padding: 12px 24px; border-radius: 25px; font-size: 14px; z-index: 1000; transition: top 0.4s; }
-        #push-notification.show { top: 20px; }
-        @media (max-width: 768px) { #mobile-menu-toggle { display: block; } #left-menu { position: absolute; left: -320px; top: 0; bottom: 0; transition: left 0.3s; } #left-menu.open { left: 0; } }
-    </style>
-</head>
-<body>
-
-    <button id="mobile-menu-toggle" onclick="document.getElementById('left-menu').classList.toggle('open')">☰ Меню</button>
-    <button class="theme-toggle-btn" id="theme-toggle" style="position: absolute; top: 12px; right: 12px; z-index: 100;">🌙</button>
-    <div id="push-notification">🔔 <span id="push-text"></span></div>
-
-    <div id="left-menu">
-        <div class="sidebar-header">
-            <h2>Ink chat</h2>
-            <div class="user-badge">Аккаунт: <span id="current-user-label" style="font-weight:bold;">Гость</span></div>
-        </div>
-        <div class="menu-scroll">
-            <div class="menu-section-title">Сессия</div>
-            <button class="menu-btn active-tab" id="tab-win-auth" onclick="switchWindow('win-auth')">🔑 Авторизация</button>
-            <button class="menu-btn" id="tab-win-messages" onclick="switchWindow('win-messages'); uiUpdateChatSelection();">💬 Чат и Диалоги</button>
-            <div class="menu-section-title">Контакты</div>
-            <button class="menu-btn" id="tab-win-friends-find" onclick="switchWindow('win-friends-find')">🔍 Найти друга</button>
-            <div class="menu-section-title">Настройки</div>
-            <button class="menu-btn" id="tab-win-profile" onclick="switchWindow('win-profile'); uiUpdateProfile();">👤 Мой профиль</button>
-            <button class="menu-btn" id="tab-win-group-create" onclick="switchWindow('win-group-create'); uiRenderGroupCreationList();">👥 Создать группу</button>
-        </div>
-    </div>
-
-    <div id="workspace">
-        <div class="window-box active" id="win-auth">
-            <h2>Вход в Ink chat</h2>
-            <div id="auth-form-block">
-                <div class="input-group"><label>Имя пользователя</label><input type="text" id="auth-username"></div>
-                <div class="input-group"><label>Пароль</label><input type="password" id="auth-password"></div>
-                <button class="btn-tg" onclick="actionLogin()">Войти</button>
-                <div class="switch-auth-mode" onclick="toggleAuthMode(false)">Нет аккаунта? Зарегистрироваться</div>
-            </div>
-            <div id="reg-form-block" style="display:none;">
-                <div class="input-group"><label>Придумайте имя</label><input type="text" id="reg-username"></div>
-                <div class="input-group"><label>Пароль</label><input type="password" id="reg-password"></div>
-                <div class="input-group"><label>Повторите пароль</label><input type="password" id="reg-password-confirm"></div>
-                <button class="btn-tg btn-tg-secondary" id="btn-toggle-reg-pass" onclick="toggleRegisterPassword()" style="margin-bottom:10px; padding:6px; font-size:12px;">👁️ Показать код</button>
-                <button class="btn-tg" onclick="actionRegister()">Создать аккаунт</button>
-                <div class="switch-auth-mode" onclick="toggleAuthMode(true)">Уже есть аккаунт? Войти</div>
-            </div>
-        </div>
-
-        <div class="window-box" id="win-messages" style="max-width: 700px;">
-            <h2>Диалоги</h2>
-            <div class="input-group">
-                <label>Выберите активный чат</label>
-                <select id="select-active-chat" onchange="uiUpdateMessages()"></select>
-            </div>
-            <div class="chat-container">
-                <div class="chat-messages" id="ui-chat-messages"></div>
-                <div class="chat-input-area">
-                    <input type="hidden" id="edit-msg-id">
-                    <input type="text" id="message-input" placeholder="Напишите сообщение...">
-                    <button class="btn-tg" id="btn-send-msg" onclick="actionSendMessage()">Отправить</button>
-                    <button class="btn-tg" id="btn-save-edit-msg" style="display:none;" onclick="actionSaveEditedMessage()">Сохранить</button>
-                </div>
-            </div>
-        </div>
-
-        <div class="window-box" id="win-friends-find">
-            <h2>Добавить друга по ID</h2>
-            <div class="input-group"><label>Десятизначный ID</label><input type="text" id="search-friend-name" placeholder="Например: 4829104952"></div>
-            <button class="btn-tg" onclick="actionFindFriend()">Добавить в контакты</button>
-        </div>
-
-        <div class="window-box" id="win-group-create">
-            <h2>Создание приватной группы</h2>
-            <div class="input-group"><label>Название группы</label><input type="text" id="new-group-name" placeholder="Например: Семья"></div>
-            <div class="input-group">
-                <label>Выберите участников из списка друзей</label>
-                <div class="checkbox-group-box" id="group-friends-checkboxes"></div>
-            </div>
-            <button class="btn-tg" onclick="actionCreateGroup()">Объединить в группу</button>
-        </div>
-
-        <div class="window-box" id="win-profile">
-            <h2>Настройки профиля</h2>
-            <div class="input-group"><label>Ваш ID</label><input type="text" id="prof-id" readonly></div>
-            <div class="input-group"><label>Дата создания</label><input type="text" id="prof-date" readonly></div>
-            <div class="input-group"><label>Изменить имя</label><input type="text" id="edit-profile-name"></div>
-            <div class="input-group"><label>Новый пароль</label><input type="password" id="edit-profile-password"></div>
-            <button class="btn-tg" onclick="actionSaveProfile()">Сохранить изменения</button>
-        </div>
-    </div>
-    <script>
-        const BACKEND_URL = 'https://ink-chat-dppr.onrender.com';
+        // ИСПРАВЛЕНО: Указан точный адрес вашего сервера на Render без лишних слэшей
+        const BACKEND_URL = 'https://onrender.com';
 
         function getCurrentUser() { try { return JSON.parse(sessionStorage.getItem('ink_current_user')); } catch(e){return null;} }
         function getMyFriends() { try { return JSON.parse(localStorage.getItem('ink_friends') || '[]'); } catch(e){return [];} }
@@ -212,8 +56,7 @@
             document.getElementById('edit-profile-password').value = u.pass;
         }
 
-                // --- ИСПРАВЛЕННЫЕ ФУНКЦИИ С ЖЕСТКИМИ АБСОЛЮТНЫМИ ПУТЯМИ ---
-                // --- ИСПРАВЛЕННЫЕ ФУНКЦИИ С ЖЕСТКИМИ АБСОЛЮТНЫМИ ПУТЯМИ ---
+        // --- API: РЕГИСТРАЦИЯ ---
         async function actionRegister() {
             const name = document.getElementById('reg-username').value.trim();
             const pass = document.getElementById('reg-password').value.trim();
@@ -225,8 +68,8 @@
             const today = new Date().toLocaleDateString('ru-RU');
 
             try {
-                // ИСПРАВЛЕНО: Полная абсолютная ссылка, чтобы исключить запросы к GitHub
-                const res = await fetch('https://onrender.com', {
+                // ИСПРАВЛЕНО: Убран редирект, запрос идет на бэкенд
+                const res = await fetch(`${BACKEND_URL}/api/register`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id: randID, name, pass, created_at: today })
@@ -241,14 +84,15 @@
             } catch (err) { alert("Сервер бэкенда недоступен: " + err.message); }
         }
 
+        // --- API: ВХОД В АККАУНТ ---
         async function actionLogin() {
             const name = document.getElementById('auth-username').value.trim();
             const pass = document.getElementById('auth-password').value.trim();
             if(!name || !pass) return alert("Заполните все поля!");
             
             try {
-                // ИСПРАВЛЕНО: Полная абсолютная ссылка
-                const res = await fetch('https://onrender.com', {
+                // ИСПРАВЛЕНО: Убран редирект, запрос идет на бэкенд
+                const res = await fetch(`${BACKEND_URL}/api/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name, pass })
@@ -262,7 +106,7 @@
                 switchWindow('win-messages');
             } catch (err) { alert("Сервер бэкенда недоступен: " + err.message); }
         }
-
+        // --- API: ДОБАВЛЕНИЕ КОНТАКТА ПО ID ---
         async function actionFindFriend() {
             let myFriends = getMyFriends();
             let currentUser = getCurrentUser();
@@ -272,8 +116,8 @@
             if (String(searchId) === String(currentUser.id)) return alert("Это ваш собственный ID!");
 
             try {
-                // ИСПРАВЛЕНО: Полная абсолютная ссылка
-                const res = await fetch('https://onrender.com' + searchId);
+                // ИСПРАВЛЕНО: Полный точный путь до эндпоинта поиска
+                const res = await fetch(`${BACKEND_URL}/api/find-user?searchId=${searchId}`);
                 const data = await res.json();
                 if (!data.matches) return alert("Пользователь не найден!");
 
@@ -288,7 +132,7 @@
             } catch (err) { alert("Ошибка поиска на сервере: " + err.message); }
         }
 
-
+        // --- API: СОХРАНЕНИЕ НАСТРОЕК ПРОФИЛЯ ---
         async function actionSaveProfile() {
             let u = getCurrentUser();
             const newName = document.getElementById('edit-profile-name').value.trim();
@@ -310,6 +154,7 @@
             } catch(e) { alert("Ошибка обновления"); }
         }
 
+        // --- API: СОЗДАНИЕ ГРУППЫ ---
         async function actionCreateGroup() {
             const gName = document.getElementById('new-group-name').value.trim();
             let u = getCurrentUser();
@@ -344,6 +189,7 @@
             });
         }
 
+        // --- UI: ОБНОВЛЕНИЕ СПИСКА АКТИВНЫХ ДИАЛОГОВ И СТАТУСОВ ---
         async function uiUpdateChatSelection() {
             let u = getCurrentUser();
             if(!u) return;
@@ -397,7 +243,7 @@
                 uiUpdateMessages();
             } catch(e){}
         }
-
+        // --- API: ОТПРАВКА СООБЩЕНИЯ ---
         async function actionSendMessage() {
             let u = getCurrentUser();
             const txt = document.getElementById('message-input').value.trim();
@@ -418,7 +264,6 @@
             } catch(e){}
         }
 
-        // Вызов окна изменения своего сообщения
         function startEditMessage(id, text) {
             document.getElementById('message-input').value = text;
             document.getElementById('edit-msg-id').value = id;
@@ -426,7 +271,7 @@
             document.getElementById('btn-save-edit-msg').style.display = 'inline-block';
         }
 
-        // Сохранение изменений редактируемого сообщения
+        // --- API: СОХРАНЕНИЕ ОТРЕДАКТИРОВАННОГО СООБЩЕНИЯ ---
         async function actionSaveEditedMessage() {
             let u = getCurrentUser();
             const id = document.getElementById('edit-msg-id').value;
@@ -448,7 +293,7 @@
             } catch(e){}
         }
 
-        // Запрос на удаление сообщения с диска
+        // --- API: УДАЛЕНИЕ СООБЩЕНИЯ ---
         async function actionDeleteMessage(id) {
             let u = getCurrentUser();
             try {
@@ -462,6 +307,7 @@
             } catch(e){}
         }
 
+        // --- UI И API: ЧТЕНИЕ И ВЫВОД ИСТОРИИ СООБЩЕНИЙ ---
         async function uiUpdateMessages() {
             let u = getCurrentUser();
             const chat = document.getElementById('ui-chat-messages');
@@ -508,7 +354,6 @@
                     let info = checkData.statuses[m.sender] || { isVerified: false };
                     let badge = info.isVerified ? ' ☑️' : '';
 
-                    // Кнопки управления собственным сообщением
                     const actionsHtml = isMyMsg ? `
                         <div class="msg-actions">
                             <span onclick="startEditMessage('${m.id}', '${escapeHTML(m.text)}')">✏️</span>
@@ -526,6 +371,7 @@
             } catch(e){}
         }
 
+        // --- ИНТЕРВАЛЫ АВТООБНОВЛЕНИЯ И АКТИВНОСТИ ---
         setInterval(async () => {
             let u = getCurrentUser(); if(!u) return;
             try { await fetch(`${BACKEND_URL}/api/heartbeat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u.name }) }); } catch(e){}
@@ -535,10 +381,12 @@
             let u = getCurrentUser(); if(!u) return;
             if(document.getElementById('win-messages').classList.contains('active')) { uiUpdateMessages(); }
         }, 4000);
-    </script>
 
-    <script>
+        // --- ИНИЦИАЛИЗАЦИЯ И ПРОГРЕВ БЭКЕНДА ПРИ ЗАГРУЗКЕ СТРАНИЦЫ ---
         document.addEventListener('DOMContentLoaded', () => {
+            // Фоновый запрос для вывода сервера Render из спящего режима
+            fetch(`${BACKEND_URL}/api/messages`).catch(() => console.log("Прогрев бэкенда..."));
+
             const themeToggleBtn = document.getElementById('theme-toggle');
             if (!themeToggleBtn) return;
 
