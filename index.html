@@ -2,69 +2,86 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Приватный Чат Ink</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ink chat</title>
     <script src="https://tailwindcss.com"></script>
-    <!-- Подключаем клиент Socket.io из CDN, так как сервера на GitHub Pages нет -->
     <script src="https://socket.io"></script>
+    <style>
+        body { background-color: #0e1621; color: #f5f5f5; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+        .tg-sidebar { background-color: #17212b; border-right: 1px solid #101921; }
+        .tg-chat-bg { background-color: #182533; }
+        .tg-header { background-color: #17212b; border-bottom: 1px solid #101921; }
+        .tg-input-area { background-color: #17212b; border-top: 1px solid #101921; }
+        .tg-item-active { background-color: #2b5278 !important; }
+        .tg-item-hover:hover { background-color: #202b36; }
+        .tg-msg-in { background-color: #182533; border: 1px solid #202b36; }
+        .tg-msg-out { background-color: #2b5278; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #202b36; border-radius: 10px; }
+    </style>
 </head>
-<body class="bg-gray-100 h-screen flex flex-col">
+<body class="h-screen flex flex-col overflow-hidden select-none">
 
-    <!-- Окно авторизации -->
-    <div id="auth-screen" class="m-auto bg-white p-6 rounded shadow-md w-80 text-center">
-        <h2 class="text-xl font-bold mb-4">Вход / Регистрация</h2>
-        <input id="auth-username" type="text" placeholder="Имя пользователя" class="w-full border p-2 mb-2 rounded">
-        <input id="auth-password" type="password" placeholder="Пароль" class="w-full border p-2 mb-4 rounded">
-        <button onclick="auth('login')" class="w-full bg-blue-500 text-white p-2 rounded mb-2">Войти</button>
-        <button onclick="auth('register')" class="w-full bg-green-500 text-white p-2 rounded">Создать аккаунт</button>
+    <!-- Экран входа -->
+    <div id="auth-screen" class="m-auto tg-sidebar p-8 rounded-xl shadow-2xl w-full max-w-sm border border-gray-800 text-center">
+        <div class="flex flex-col items-center mb-6">
+            <div class="w-14 h-14 bg-[#2b5278] rounded-2xl flex items-center justify-center text-xl font-bold text-white mb-2 shadow-md">Ink</div>
+            <h2 class="text-xl font-semibold tracking-wide">Ink chat</h2>
+        </div>
+        <div class="space-y-3">
+            <input id="auth-username" type="text" placeholder="Имя пользователя" class="w-full bg-[#101921] border border-gray-700 p-2.5 rounded-lg text-sm focus:outline-none focus:border-[#2b5278]">
+            <input id="auth-password" type="password" placeholder="Пароль" class="w-full bg-[#101921] border border-gray-700 p-2.5 rounded-lg text-sm focus:outline-none focus:border-[#2b5278]">
+            <button onclick="auth('login')" class="w-full bg-[#2b5278] hover:bg-[#33628c] text-white p-2.5 rounded-lg text-sm transition-colors">Войти</button>
+            <button onclick="auth('register')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white p-2.5 rounded-lg text-sm transition-colors">Регистрация</button>
+        </div>
     </div>
-
-    <!-- Основной интерфейс чата -->
+    <!-- Основной чат -->
     <div id="chat-screen" class="hidden flex h-full w-full">
-        <div class="w-1/4 bg-gray-800 text-white p-4 flex flex-col justify-between">
-            <div>
-                <div class="mb-4 border-b border-gray-700 pb-2">
-                    <p class="font-bold text-lg" id="my-name"></p>
-                    <p class="text-sm text-gray-400">Ваш ID: <span id="my-id" class="font-mono text-yellow-400"></span></p>
+        <!-- Левая панель -->
+        <div class="w-80 tg-sidebar flex flex-col justify-between">
+            <div class="flex flex-col h-full overflow-hidden">
+                <div class="p-3 border-b border-[#101921] flex items-center justify-between bg-[#131c26]">
+                    <div>
+                        <p class="font-semibold text-sm" id="my-name"></p>
+                        <p class="text-xs text-gray-400">ID: <span id="my-id" class="text-amber-400 font-mono font-bold"></span></p>
+                    </div>
                 </div>
-                
-                <div class="mb-4 space-y-2">
-                    <input id="new-room-name" type="text" placeholder="Имя группы" class="w-full p-1 text-black text-sm rounded">
-                    <button onclick="createRoom()" class="w-full bg-blue-600 text-xs py-1 rounded">Создать Группу</button>
-                    
-                    <input id="new-dm-id" type="text" placeholder="5-значный ID друга" class="w-full p-1 text-black text-sm rounded">
-                    <button onclick="createDM()" class="w-full bg-purple-600 text-xs py-1 rounded">Найти друга (ЛС)</button>
+                <div class="p-3 space-y-2 border-b border-[#101921]">
+                    <div class="flex gap-1.5">
+                        <input id="new-dm-id" type="text" maxlength="5" placeholder="ID друга..." class="flex-1 bg-[#101921] border border-gray-700 px-2 py-1 text-xs rounded-md focus:outline-none focus:border-[#2b5278]">
+                        <button onclick="createDM()" class="bg-[#2b5278] px-3 rounded-md text-xs">ЛС</button>
+                    </div>
+                    <div class="flex gap-1.5">
+                        <input id="new-room-name" type="text" placeholder="Имя группы..." class="flex-1 bg-[#101921] border border-gray-700 px-2 py-1 text-xs rounded-md focus:outline-none focus:border-[#2b5278]">
+                        <button onclick="createRoom()" class="bg-emerald-600 px-3 rounded-md text-xs">Группа</button>
+                    </div>
                 </div>
-
-                <h3 class="font-semibold mb-2 text-gray-300">Ваши чаты:</h3>
-                <div id="rooms-list" class="space-y-1 overflow-y-auto max-h-64"></div>
+                <div class="flex-1 overflow-y-auto p-2 space-y-1" id="rooms-list"></div>
             </div>
-            <button onclick="location.reload()" class="bg-red-600 p-2 rounded text-sm text-center">Выйти</button>
+            <div class="p-3 border-t border-[#101921]">
+                <button onclick="location.reload()" class="w-full bg-rose-900/30 text-rose-400 text-xs py-2 rounded-md border border-rose-500/20">Выйти</button>
+            </div>
         </div>
 
-        <div class="w-3/4 flex flex-col bg-white">
-            <div id="chat-header" class="p-4 bg-gray-200 font-bold border-b">Выберите чат</div>
-            <div id="messages-container" class="flex-1 p-4 overflow-y-auto space-y-2"></div>
-            
-            <div id="input-area" class="hidden p-4 border-t flex gap-2">
-                <input id="message-input" type="text" placeholder="Введите сообщение..." class="flex-1 border p-2 rounded">
-                <button onclick="sendMessage()" class="bg-blue-500 text-white px-4 py-2 rounded">Отправить</button>
+        <!-- Зона чата -->
+        <div class="flex-1 flex flex-col tg-chat-bg">
+            <div id="chat-header" class="p-4 tg-header font-medium text-sm flex items-center h-[53px]">Выберите чат...</div>
+            <div id="messages-container" class="flex-1 p-4 overflow-y-auto space-y-3 flex flex-col"></div>
+            <div id="input-area" class="hidden p-3 tg-input-area flex gap-3">
+                <input id="message-input" type="text" placeholder="Напишите сообщение..." class="flex-1 bg-[#101921] border border-gray-700 p-2 px-4 rounded-xl text-sm focus:outline-none" onkeypress="if(event.key==='Enter') sendMessage()">
+                <button onclick="sendMessage()" class="bg-[#2b5278] text-white px-5 rounded-xl text-sm">Отправить</button>
             </div>
         </div>
     </div>
-
     <script>
-        // УКАЖИТЕ ЗДЕСЬ ССЫЛКУ НА ВАШ WEB SERVICE ИЗ RENDER
-        const SERVER_URL = 'https://onrender.com'; 
+        const SERVER_URL = 'https://onrender.com'; // ЗАМЕНИТЕ НА ВАШ URL С RENDER
 
-        // Настройка сокетов с указанием адреса сервера Render
         const socket = io(SERVER_URL, { withCredentials: true });
-        let me = null;
-        let activeRoomId = null;
+        let me = null, activeRoomId = null;
 
         async function auth(type) {
             const username = document.getElementById('auth-username').value;
             const password = document.getElementById('auth-password').value;
-            
             try {
                 const res = await fetch(`${SERVER_URL}/api/${type}`, {
                     method: 'POST',
@@ -73,115 +90,88 @@
                 });
                 const data = await res.json();
                 if (data.error) return alert(data.error);
-                initChat(data);
-            } catch(e) {
-                alert("Ошибка подключения к серверу Render. Возможно он 'спит'.");
-            }
-        }
-
-        function initChat(user) {
-            me = user;
-            document.getElementById('auth-screen').classList.add('hidden');
-            document.getElementById('chat-screen').classList.remove('hidden');
-            document.getElementById('my-name').innerText = me.username;
-            document.getElementById('my-id').innerText = me.id;
-            socket.emit('auth', me.id);
+                me = data;
+                document.getElementById('auth-screen').classList.add('hidden');
+                document.getElementById('chat-screen').classList.remove('hidden');
+                document.getElementById('my-name').innerText = me.username;
+                document.getElementById('my-id').innerText = me.id;
+                socket.emit('auth', me.id);
+            } catch(e) { alert("Сервер засыпает, подождите 30 секунд..."); }
         }
 
         function createRoom() {
-            const name = document.getElementById('new-room-name').value;
-            if (name) socket.emit('create_room', { name, userId: me.id });
+            const el = document.getElementById('new-room-name');
+            if (el.value.trim()) socket.emit('create_room', { name: el.value.trim(), userId: me.id }), el.value = '';
         }
 
         function createDM() {
-            const targetId = document.getElementById('new-dm-id').value;
-            if (targetId) socket.emit('create_dm', { targetId, userId: me.id });
+            const el = document.getElementById('new-dm-id');
+            if (el.value.trim()) socket.emit('create_dm', { targetId: el.value.trim(), userId: me.id }), el.value = '';
         }
 
         function selectRoom(roomId, title) {
             activeRoomId = roomId;
             document.getElementById('chat-header').innerText = title;
             document.getElementById('input-area').classList.remove('hidden');
+            document.querySelectorAll('.chat-item').forEach(e => e.classList.remove('tg-item-active'));
+            document.getElementById(`room-${roomId}`)?.classList.add('tg-item-active');
             socket.emit('join_room', roomId);
         }
 
         function sendMessage() {
-            const input = document.getElementById('message-input');
-            if (!input.value.trim() || !activeRoomId) return;
-            socket.emit('send_message', { roomId: activeRoomId, userId: me.id, username: me.username, text: input.value });
-            input.value = '';
+            const el = document.getElementById('message-input');
+            if (!el.value.trim() || !activeRoomId) return;
+            socket.emit('send_message', { roomId: activeRoomId, userId: me.id, username: me.username, text: el.value.trim() });
+            el.value = '';
         }
 
         function editMessage(msgId, oldText) {
-            const newText = prompt("Редактировать сообщение:", oldText);
-            if (newText && newText !== oldText) {
-                socket.emit('edit_message', { msgId, roomId: activeRoomId, userId: me.id, newText });
-            }
+            const newText = prompt("Редактировать:", oldText);
+            if (newText && newText.trim() !== oldText) socket.emit('edit_message', { msgId, roomId: activeRoomId, userId: me.id, newText: newText.trim() });
         }
 
         function deleteMessage(msgId) {
-            if (confirm("Удалить это сообщение?")) {
-                socket.emit('delete_message', { msgId, roomId: activeRoomId, userId: me.id });
-            }
+            if (confirm("Удалить сообщение?")) socket.emit('delete_message', { msgId, roomId: activeRoomId, userId: me.id });
         }
 
-        function leaveRoom(event, roomId, title) {
-            // Останавливаем всплытие события, чтобы при нажатии на крестик не открывался сам чат
-            event.stopPropagation(); 
-            
-            if (confirm(`Вы уверены, что хотите удалить чат с "${title}"?`)) {
+        function leaveRoom(e, roomId, title) {
+            e.stopPropagation();
+            if (confirm(`Удалить чат с "${title}"?`)) {
                 socket.emit('delete_room', { roomId, userId: me.id });
-                
-                // Если был открыт удаляемый чат, сбрасываем интерфейс
                 if (activeRoomId === roomId) {
                     activeRoomId = null;
-                    document.getElementById('chat-header').innerText = 'Выберите чат';
+                    document.getElementById('chat-header').innerText = 'Выберите чат...';
                     document.getElementById('messages-container').innerHTML = '';
                     document.getElementById('input-area').classList.add('hidden');
                 }
             }
         }
 
-                socket.on('rooms_list', (rooms) => {
+        socket.on('rooms_list', (rooms) => {
             const list = document.getElementById('rooms-list');
             list.innerHTML = '';
             rooms.forEach(r => {
                 const title = r.is_dm ? r.dm_name : `👥 ${r.name}`;
-                
-                // Кнопка удаления (крестик) отображается для всех чатов
+                const active = r.id === activeRoomId ? 'tg-item-active' : '';
                 list.innerHTML += `
-                    <div class="flex items-center justify-between p-2 bg-gray-700 hover:bg-gray-600 rounded text-sm group">
-                        <div onclick="selectRoom('${r.id}', '${title}')" class="cursor-pointer flex-1 truncate">
-                            ${title}
+                    <div id="room-${r.id}" onclick="selectRoom('${r.id}', '${title}')" class="chat-item flex items-center justify-between p-2.5 rounded-lg text-sm cursor-pointer tg-item-hover ${active} group">
+                        <div class="flex items-center gap-2 truncate flex-1">
+                            <div class="w-7 h-7 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold uppercase shrink-0">${title.charAt(r.is_dm ? 0 : 2)}</div>
+                            <div class="truncate font-medium">${title}</div>
                         </div>
-                        <button onclick="leaveRoom(event, '${r.id}', '${title}')" class="text-gray-400 hover:text-red-400 ml-2 font-bold px-1 hidden group-hover:block">
-                            &times;
-                        </button>
-                    </div>
-                `;
+                        <button onclick="leaveRoom(event, '${r.id}', '${title}')" class="text-gray-400 hover:text-rose-400 font-bold opacity-0 group-hover:opacity-100 px-1 text-base">&times;</button>
+                    </div>`;
             });
         });
 
-
         socket.on('messages_list', (messages) => {
-            const container = document.getElementById('messages-container');
-            container.innerHTML = '';
+            document.getElementById('messages-container').innerHTML = '';
             messages.forEach(appendMessage);
         });
 
-        socket.on('new_message', (msg) => {
-            if (msg.room_id === activeRoomId) appendMessage(msg);
-        });
-
-        socket.on('message_edited', ({ id, text }) => {
-            const el = document.getElementById(`text-${id}`);
-            if (el) el.innerText = text;
-        });
-
-        socket.on('message_deleted', (id) => {
-            document.getElementById(`msg-${id}`)?.remove();
-        });
-
+        socket.on('new_message', (msg) => { if (msg.room_id === activeRoomId) appendMessage(msg); });
+        socket.on('message_edited', ({ id, text }) => { const el = document.getElementById(`text-${id}`); if (el) el.innerText = text; });
+        socket.on('message_deleted', (id) => document.getElementById(`msg-${id}`)?.remove());
         socket.on('refresh_rooms', () => socket.emit('refresh_rooms'));
         socket.on('error_msg', alert);
 
@@ -189,16 +179,18 @@
             const container = document.getElementById('messages-container');
             const isMy = msg.user_id === me.id;
             const actions = isMy ? `
-                <span onclick="editMessage('${msg.id}', '${msg.text}')" class="text-xs text-blue-500 cursor-pointer ml-2">ред.</span>
-                <span onclick="deleteMessage('${msg.id}')" class="text-xs text-red-500 cursor-pointer ml-1">удал.</span>
-            ` : '';
+                <div class="opacity-0 group-hover:opacity-100 flex gap-2 ml-2 text-[10px] text-sky-300">
+                    <span onclick="editMessage('${msg.id}', '${msg.text}')" class="cursor-pointer hover:underline">ред.</span>
+                    <span onclick="deleteMessage('${msg.id}')" class="cursor-pointer hover:underline text-rose-400">удал.</span>
+                </div>` : '';
 
             container.innerHTML += `
-                <div id="msg-${msg.id}" class="p-2 rounded bg-gray-50 border max-w-lg ${isMy ? 'ml-auto bg-blue-50' : ''}">
-                    <div class="text-xs font-bold text-gray-600">${msg.username} ${actions}</div>
-                    <div id="text-${msg.id}" class="text-sm mt-1 text-gray-800">${msg.text}</div>
-                </div>
-            `;
+                <div id="msg-${msg.id}" class="flex flex-col group max-w-[75%] ${isMy ? 'self-end items-end' : 'self-start items-start'}">
+                    <div class="text-[10px] text-gray-400 mb-0.5 flex items-center">${msg.username} ${actions}</div>
+                    <div class="p-2 px-3 rounded-xl text-sm shadow-sm ${isMy ? 'tg-msg-out rounded-tr-none' : 'tg-msg-in rounded-tl-none'}">
+                        <div id="text-${msg.id}" class="break-words whitespace-pre-wrap">${msg.text}</div>
+                    </div>
+                </div>`;
             container.scrollTop = container.scrollHeight;
         }
     </script>
