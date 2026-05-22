@@ -154,7 +154,7 @@
         </div>
     </div>
     <script>
-        const BACKEND_URL = 'https://onrender.com';
+        const BACKEND_URL = 'https://ink-chat-dppr.onrender.com';
 
         function getCurrentUser() { try { return JSON.parse(sessionStorage.getItem('ink_current_user')); } catch(e){return null;} }
         function getMyFriends() { try { return JSON.parse(localStorage.getItem('ink_friends') || '[]'); } catch(e){return [];} }
@@ -222,7 +222,7 @@
             const today = new Date().toLocaleDateString('ru-RU');
 
             try {
-                const res = await fetch(`${BACKEND_URL}/api/register`, {
+                const res = await fetch(`${BACKEND_URL}/api/register`, { ... });
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id: randID, name, pass, created_at: today })
@@ -243,7 +243,7 @@
             if(!name || !pass) return alert("Заполните все поля!");
             
             try {
-                const res = await fetch(`${BACKEND_URL}/api/login`, {
+                const res = await fetch(`${BACKEND_URL}/api/login`, { ... });
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name, pass })
@@ -533,7 +533,8 @@
 
         // --- ИНИЦИАЛИЗАЦИЯ И ПРОГРЕВ БЭКЕНДА ПРИ ЗАГРУЗКЕ СТРАНИЦЫ ---
         document.addEventListener('DOMContentLoaded', () => {
-            fetch(`${BACKEND_URL}/api/messages`).catch(() => console.log("Прогрев бэкенда..."));
+    // ИСПРАВЛЕНО: Теперь запрос идет строго на ваш сервер ink-chat-dppr
+    fetch(`${BACKEND_URL}/api/messages`).catch(() => console.log("Прогрев бэкенда..."));
 
             const themeToggleBtn = document.getElementById('theme-toggle');
             if (!themeToggleBtn) return;
