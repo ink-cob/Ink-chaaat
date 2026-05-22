@@ -3,160 +3,173 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Ink chat</title>
+    <title>Telegram</title>
     <script src="https://tailwindcss.com"></script>
     <script src="https://socket.io"></script>
     <style>
-        /* Тема Telegram Web Dark (Глубокий черный и полночный синий) */
-        body { background-color: #0e1621; color: #f5f5f5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
-        .tg-bg-main { background-color: #0e1621; }
-        .tg-bg-sidebar { background-color: #17212b; border-right: 1px solid #101921; }
-        .tg-bg-chat { background-color: #0e1621; background-image: radial-gradient(rgba(23, 33, 43, 0.4) 15%, transparent 15%); background-size: 16px 16px; }
-        .tg-bg-header { background-color: #17212b; border-bottom: 1px solid #101921; }
-        .tg-bg-input { background-color: #17212b; }
-        
-        /* Цветовые акценты Telegram */
-        .tg-active { background-color: #2b5278 !important; color: #ffffff !important; }
-        .tg-hover:hover { background-color: #202b36; }
-        .tg-msg-in { background-color: #182533; border-radius: 12px 12px 12px 3px; }
-        .tg-msg-out { background-color: #2b5278; border-radius: 12px 12px 3px 12px; }
-        
-        /* Плавные переходы страниц в стиле ТГ */
-        .page-slide { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-        .sidebar-menu { transform: translateX(-100%); transition: transform 0.25s ease-in-out; }
-        .sidebar-menu.open { transform: translateX(0); }
-
-        /* Адаптивность для мобилок (Многостраничность на узких экранах) */
-        @media (max-width: 768px) {
-            .mobile-page-hidden { display: none !important; }
-            .mobile-page-full { width: 100% !important; position: fixed; inset: 0; z-index: 40; }
+        /* Оригинальная палитра Telegram Web Dark */
+        :root {
+            --bg-color: #0e1621;
+            --sidebar-bg: #17212b;
+            --surface-hover: #202b36;
+            --text-main: #f5f5f5;
+            --text-muted: #708499;
+            --accent: #5288c1;
+            --accent-hover: #6496cb;
+            --msg-in: #182533;
+            --msg-out: #2b5278;
+            --border: #101921;
         }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); border-radius: 4px; }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Компоненты ТГ */
+        .tg-sidebar { background-color: var(--sidebar-bg); border-right: 1px solid var(--border); }
+        .tg-input { background-color: var(--bg-color); border: 1px solid var(--border); }
+        .tg-input:focus { border-color: var(--accent); }
+        
+        .item-active { background-color: var(--accent) !important; color: #fff !important; }
+        .item-active .text-muted { color: #cbd5e1 !important; }
+        
+        .msg-in-bubble { background-color: var(--msg-in); border-radius: 10px 10px 10px 2px; }
+        .msg-out-bubble { background-color: var(--msg-out); border-radius: 10px 10px 2px 10px; }
+
+        /* Навигация слайдов (меню и экраны) */
+        .drawer { transform: translateX(-100%); transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        .drawer.open { transform: translateX(0); }
+
+        @media (max-width: 768px) {
+            .mobile-hidden { display: none !important; }
+            .mobile-full { width: 100% !important; position: fixed; inset: 0; z-index: 30; }
+        }
+
+        /* Нативный тонкий скроллбар */
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
     </style>
 </head>
-<body class="h-screen w-screen flex flex-col relative overflow-hidden select-none tg-bg-main">
-    <!-- 1. СТРАНИЦА АВТОРИЗАЦИИ -->
-    <div id="auth-screen" class="m-auto tg-bg-sidebar p-8 rounded-2xl shadow-2xl w-full max-w-sm text-center border border-gray-800 z-50">
-        <div class="flex flex-col items-center mb-8">
-            <div class="w-16 h-16 bg-[#2b5278] rounded-2xl flex items-center justify-center text-2xl font-black text-white mb-2 shadow-md tracking-wider">INK</div>
-            <h2 class="text-2xl font-bold text-white">Ink chat</h2>
-            <p class="text-xs text-gray-400 mt-1">Официальная Web-версия мессенджера</p>
+<body class="h-screen w-screen flex flex-col relative overflow-hidden select-none">
+    <!-- ЭКРАН АВТОРИЗАЦИИ (Строгий flat-стиль ТГ Веб) -->
+    <div id="auth-screen" class="m-auto w-full max-w-[360px] p-6 z-40">
+        <div class="text-center mb-8">
+            <svg class="w-24 h-24 mx-auto text-[#5288c1]" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-1-.65-.35-1 .22-1.62.15-.15 2.73-2.5 2.78-2.7.01-.03.01-.15-.06-.21-.07-.06-.17-.04-.25-.02-.11.02-1.83 1.16-5.16 3.41-.49.33-.93.5-1.33.49-.44-.01-1.29-.25-1.92-.45-.77-.25-1.39-.39-1.34-.83.03-.23.35-.46.97-.71 3.82-1.66 6.37-2.75 7.64-3.27 3.63-1.49 4.38-1.75 4.87-1.76.11 0 .35.03.5.15.13.1.17.24.19.34.02.13.03.36.01.52z"/>
+            </svg>
+            <h2 class="text-2xl font-medium mt-4 tracking-tight">Вход в Ink chat</h2>
+            <p class="text-sm text-[#708499] mt-2">Введите имя пользователя для синхронизации</p>
         </div>
-        <div class="space-y-3.5">
-            <input id="auth-username" type="text" placeholder="Имя пользователя" class="w-full bg-[#0e1621] border border-gray-700/60 p-3 rounded-xl text-sm focus:outline-none focus:border-[#2b5278] text-gray-200">
-            <input id="auth-password" type="password" placeholder="Пароль" class="w-full bg-[#0e1621] border border-gray-700/60 p-3 rounded-xl text-sm focus:outline-none focus:border-[#2b5278] text-gray-200">
-            <button onclick="auth('login')" class="w-full bg-[#2b5278] hover:bg-[#33628c] text-white font-medium p-3 rounded-xl text-sm transition-all active:scale-[0.98]">ВОЙТИ</button>
-            <button onclick="auth('register')" class="w-full bg-transparent hover:bg-white/5 text-gray-400 text-sm py-2 transition-all">Регистрация аккаунта</button>
+        <div class="space-y-3">
+            <input id="auth-username" type="text" placeholder="Имя пользователя" class="w-full tg-input p-3 rounded-lg text-sm outline-none transition-all">
+            <input id="auth-password" type="password" placeholder="Пароль" class="w-full tg-input p-3 rounded-lg text-sm outline-none transition-all">
+            <button onclick="auth('login')" class="w-full bg-[#5288c1] hover:bg-[#6496cb] text-white font-medium p-3 rounded-lg text-sm transition-colors mt-2">ДАЛЕЕ</button>
+            <button onclick="auth('register')" class="w-full bg-transparent text-[#5288c1] hover:underline text-sm py-2 block text-center">Создать аккаунт</button>
         </div>
     </div>
 
-    <!-- 2. ВЫДВИЖНАЯ СТРАНИЦА НАСТРОЕК (МЕНЮ ТГ) -->
-    <div id="settings-sidebar" class="sidebar-menu fixed top-0 left-0 h-full w-72 tg-bg-sidebar z-50 shadow-2xl flex flex-col justify-between border-r border-gray-800">
+    <!-- ВЫДВИЖНОЕ МЕНЮ (Drawer как в Telegram) -->
+    <div id="settings-sidebar" class="drawer fixed top-0 left-0 h-full w-72 tg-sidebar z-50 flex flex-col justify-between">
         <div>
-            <div class="p-4 bg-[#131c26] border-b border-gray-800 flex items-center gap-3">
-                <button onclick="toggleSettingsMenu()" class="text-gray-400 hover:text-white">
+            <div class="p-3 bg-[#17212b] border-b border-[#101921] flex items-center gap-4 h-[56px]">
+                <button onclick="toggleSettingsMenu()" class="text-[#708499] hover:text-white p-1">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
                 </button>
-                <h3 class="font-bold text-base">Настройки</h3>
+                <span class="font-medium text-base">Инфо</span>
             </div>
-            <div class="p-6 text-center border-b border-gray-800 bg-white/[0.01]">
-                <div class="w-16 h-16 bg-[#2b5278] rounded-full mx-auto flex items-center justify-center text-xl font-bold uppercase text-white mb-3" id="menu-avatar">-</div>
-                <h4 class="font-bold text-base text-white" id="menu-username">User</h4>
-                <p class="text-xs text-amber-400 font-mono mt-1">ID: <span id="menu-id">00000</span></p>
+            <div class="p-4 border-b border-[#101921] flex items-center gap-3">
+                <div class="w-12 h-12 bg-[#5288c1] rounded-full flex items-center justify-center text-lg font-bold text-white uppercase shrink-0" id="menu-avatar">-</div>
+                <div class="truncate">
+                    <h4 class="font-medium text-sm text-white truncate" id="menu-username">User</h4>
+                    <p class="text-xs text-[#708499] font-mono mt-0.5">ID: <span id="menu-id" class="text-amber-500 font-bold">00000</span></p>
+                </div>
             </div>
-            <div class="p-2 space-y-1">
-                <button onclick="toggleModal('modal-dm'); toggleSettingsMenu();" class="w-full text-left p-3 text-sm rounded-xl tg-hover flex items-center gap-3">👤 Поиск друга по ID</button>
-                <button onclick="toggleModal('modal-group'); toggleSettingsMenu();" class="w-full text-left p-3 text-sm rounded-xl tg-hover flex items-center gap-3">👥 Создать группу</button>
+            <div class="p-1 space-y-0.5">
+                <button onclick="openPrompt('dm')" class="w-full text-left px-4 py-3 text-sm rounded-lg hover:bg-[#202b36] flex items-center gap-3 text-gray-300">
+                    <svg class="w-5 h-5 text-[#708499]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    Найти друга по ID
+                </button>
+                <button onclick="openPrompt('group')" class="w-full text-left px-4 py-3 text-sm rounded-lg hover:bg-[#202b36] flex items-center gap-3 text-gray-300">
+                    <svg class="w-5 h-5 text-[#708499]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    Создать группу
+                </button>
             </div>
         </div>
-        <div class="p-4 border-t border-gray-800 bg-[#131c26]">
-            <button onclick="location.reload()" class="w-full bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 text-xs py-2.5 rounded-xl font-medium border border-rose-500/20 transition-colors">Выйти из аккаунта</button>
-        </div>
-    </div>
-    <!-- Модальные окна для добавления контента -->
-    <div id="modal-dm" class="hidden fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-        <div class="tg-bg-sidebar p-5 rounded-2xl w-full max-w-xs shadow-2xl border border-gray-800">
-            <h3 class="text-sm font-bold text-white mb-3">Найти друга по ID</h3>
-            <input id="new-dm-id" type="text" maxlength="5" placeholder="Введите 5 цифр..." class="w-full bg-[#0e1621] border border-gray-700 p-2.5 rounded-xl text-sm text-center font-mono focus:outline-none focus:border-[#2b5278] text-amber-400 font-bold mb-4 tracking-widest">
-            <div class="flex gap-2 text-xs">
-                <button onclick="toggleModal('modal-dm')" class="flex-1 bg-white/5 py-2 rounded-lg">Отмена</button>
-                <button onclick="createDM()" class="flex-1 bg-[#2b5278] py-2 rounded-lg font-bold">Начать</button>
-            </div>
+        <div class="p-3 border-t border-[#101921]">
+            <button onclick="location.reload()" class="w-full text-[#708499] hover:text-rose-400 text-xs py-2 text-center transition-colors">Выйти из аккаунта</button>
         </div>
     </div>
-
-    <div id="modal-group" class="hidden fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-        <div class="tg-bg-sidebar p-5 rounded-2xl w-full max-w-xs shadow-2xl border border-gray-800">
-            <h3 class="text-sm font-bold text-white mb-3">Создать группу</h3>
-            <input id="new-room-name" type="text" placeholder="Название группы" class="w-full bg-[#0e1621] border border-gray-700 p-2.5 rounded-xl text-sm focus:outline-none focus:border-[#2b5278] text-gray-200 mb-4">
-            <div class="flex gap-2 text-xs">
-                <button onclick="toggleModal('modal-group')" class="flex-1 bg-white/5 py-2 rounded-lg">Отмена</button>
-                <button onclick="createRoom()" class="flex-1 bg-[#2b5278] py-2 rounded-lg font-bold">Создать</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 3. ОСНОВНОЙ ЭКРАН (ГЛАВНАЯ СТРАНИЦА + ОКНО ЧАТА) -->
+    <!-- ОСНОВНОЙ РАБОЧИЙ ИНТЕРФЕЙС -->
     <div id="chat-screen" class="hidden flex h-full w-full overflow-hidden">
         
-        <!-- Страница А: Лента чатов (Боковая панель) -->
-        <div class="w-80 h-full tg-bg-sidebar flex flex-col shrink-0 mobile-page-full z-20">
-            <!-- Шапка ТГ Веб -->
-            <div class="p-3 tg-bg-header flex items-center gap-3 h-[56px]">
-                <button onclick="toggleSettingsMenu()" class="text-gray-400 hover:text-white p-1 rounded-lg">
+        <!-- ЛЕВАЯ СТРАНИЦА: Список чатов -->
+        <div class="w-80 h-full tg-sidebar flex flex-col shrink-0 mobile-full z-20">
+            <!-- Хедер Сайдбара -->
+            <div class="p-3 h-[56px] flex items-center gap-3 shrink-0">
+                <button onclick="toggleSettingsMenu()" class="text-[#708499] hover:text-white p-1 rounded-md">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
                 </button>
-                <div class="flex-1 font-bold text-base tracking-wide text-white">Ink chat</div>
+                <div class="flex-1 font-medium text-lg tracking-tight text-white">Telegram</div>
             </div>
             
-            <!-- Табы / Категории -->
-            <div class="px-3 pt-2 flex gap-1 text-[11px] font-bold text-gray-400 border-b border-gray-900 pb-2">
-                <button onclick="filterRooms('all')" id="tab-all" class="flex-1 py-1.5 rounded-md bg-white/5 text-white text-center">ВСЕ</button>
-                <button onclick="filterRooms('dm')" id="tab-dm" class="flex-1 py-1.5 rounded-md text-center hover:text-white">ЛИЧНЫЕ</button>
-                <button onclick="filterRooms('group')" id="tab-group" class="flex-1 py-1.5 rounded-md text-center hover:text-white">ГРУППЫ</button>
+            <!-- Плоские вкладки категорий -->
+            <div class="px-2 flex text-xs font-medium text-[#708499] border-b border-[#101921] pb-1 shrink-0">
+                <button onclick="filterRooms('all')" id="tab-all" class="flex-1 py-2 border-b-2 border-[#5288c1] text-white text-center">Все</button>
+                <button onclick="filterRooms('dm')" id="tab-dm" class="flex-1 py-2 border-b-2 border-transparent text-center">Личные</button>
+                <button onclick="filterRooms('group')" id="tab-group" class="flex-1 py-2 border-b-2 border-transparent text-center">Группы</button>
             </div>
 
-            <!-- Список чатов -->
-            <div class="flex-1 overflow-y-auto p-1.5 space-y-0.5" id="rooms-list"></div>
+            <!-- Список элементов -->
+            <div class="flex-1 overflow-y-auto p-1 space-y-0.5" id="rooms-list"></div>
         </div>
 
-        <!-- Страница Б: Окно просмотра сообщений (Правая панель) -->
-        <div id="chat-view-screen" class="flex-1 h-full flex flex-col tg-bg-chat mobile-page-hidden mobile-page-full z-30">
-            <!-- Шапка чата -->
-            <div class="p-3 tg-bg-header h-[56px] flex items-center justify-between shadow-sm">
-                <div class="flex items-center gap-3 truncate">
-                    <!-- Кнопка назад (Появляется только на мобилках) -->
-                    <button onclick="closeChatPage()" class="md:hidden text-gray-400 hover:text-white">
+        <!-- ПРАВАЯ СТРАНИЦА: Терминал сообщений -->
+        <div id="chat-view-screen" class="flex-1 h-full flex flex-col mobile-hidden mobile-full z-30 tg-bg-chat">
+            <!-- Хедер чата -->
+            <div class="p-3 bg-[#17212b] border-b border-[#101921] h-[56px] flex items-center shrink-0">
+                <div class="flex items-center gap-3 truncate w-full">
+                    <button onclick="closeChatPage()" class="md:hidden text-[#708499] hover:text-white">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
                     </button>
-                    <div id="chat-header" class="font-semibold text-sm text-gray-200 truncate">Выберите, кому написать...</div>
+                    <div id="chat-header" class="font-medium text-sm text-white truncate">Выберите чат...</div>
                 </div>
             </div>
             
-            <!-- Контейнер с сообщениями -->
-            <div id="messages-container" class="flex-1 p-4 overflow-y-auto space-y-3 flex flex-col"></div>
+            <!-- Лента переписки -->
+            <div id="messages-container" class="flex-1 p-4 overflow-y-auto space-y-2 flex flex-col"></div>
             
-            <!-- Панель ввода -->
-            <div id="input-area" class="hidden p-3 tg-bg-input flex gap-3 items-center">
-                <input id="message-input" type="text" placeholder="Напишите сообщение..." class="flex-1 bg-[#0e1621] border border-gray-700/60 p-2.5 px-4 rounded-xl text-sm focus:outline-none" onkeypress="if(event.key==='Enter') sendMessage()">
-                <button onclick="sendMessage()" class="bg-[#2b5278] text-white p-2.5 rounded-xl text-sm font-medium shrink-0">Отправить</button>
+            <!-- Нижняя панель ввода текста -->
+            <div id="input-area" class="hidden p-3 bg-[#17212b] border-t border-[#101921] flex gap-3 items-center shrink-0">
+                <input id="message-input" type="text" placeholder="Напишите сообщение..." class="flex-1 bg-[#0e1621] text-white border border-[#101921] focus:border-[#5288c1] p-2.5 px-4 rounded-lg text-sm outline-none transition-colors" onkeypress="if(event.key==='Enter') sendMessage()">
+                <button onclick="sendMessage()" class="text-[#5288c1] hover:text-[#6496cb] text-sm font-medium px-2 py-1 uppercase tracking-wide">Отправить</button>
             </div>
         </div>
     </div>
     <script>
-        const SERVER_URL = 'https://onrender.com'; // СЮДА ВАШ URL С RENDER
+        // Укажите URL вашего инстанса на Render
+        const SERVER_URL = 'https://onrender.com'; 
 
         const socket = io(SERVER_URL, { withCredentials: true });
         let me = null, activeRoomId = null, allRooms = [], currentFilter = 'all';
 
-        function toggleModal(id) { document.getElementById(id).classList.toggle('hidden'); }
         function toggleSettingsMenu() { document.getElementById('settings-sidebar').classList.toggle('open'); }
+        function closeChatPage() { document.getElementById('chat-view-screen').classList.add('mobile-hidden'); activeRoomId = null; }
 
-        // Адаптивное закрытие чат-страницы на мобилках (возврат к списку)
-        function closeChatPage() {
-            document.getElementById('chat-view-screen').classList.add('mobile-page-hidden');
-            activeRoomId = null;
+        // Нативные системные диалоги вместо колхозных тяжелых окон
+        function openPrompt(type) {
+            toggleSettingsMenu();
+            if (type === 'dm') {
+                const id = prompt("Введите 5-значный ID друга:");
+                if (id && id.trim()) socket.emit('create_dm', { targetId: id.trim(), userId: me.id });
+            } else {
+                const name = prompt("Введите название новой группы:");
+                if (name && name.trim()) socket.emit('create_room', { name: name.trim(), userId: me.id });
+            }
         }
 
         async function auth(type) {
@@ -174,35 +187,21 @@
                 document.getElementById('auth-screen').classList.add('hidden');
                 document.getElementById('chat-screen').classList.remove('hidden');
                 
-                // Заполнение профиля в боковом меню
                 document.getElementById('menu-username').innerText = me.username;
                 document.getElementById('menu-id').innerText = me.id;
                 document.getElementById('menu-avatar').innerText = me.username.charAt(0);
-                
                 socket.emit('auth', me.id);
-            } catch(e) { alert("Сервер на Render просыпается, попробуйте войти ещё раз через 20 секунд."); }
-        }
-
-        function createRoom() {
-            const el = document.getElementById('new-room-name');
-            if (el.value.trim()) socket.emit('create_room', { name: el.value.trim(), userId: me.id }), el.value = '', toggleModal('modal-group');
-        }
-
-        function createDM() {
-            const el = document.getElementById('new-dm-id');
-            if (el.value.trim()) socket.emit('create_dm', { targetId: el.value.trim(), userId: me.id }), el.value = '', toggleModal('modal-dm');
+            } catch(e) { alert("Сервер просыпается. Повторите через 15 секунд."); }
         }
 
         function selectRoom(roomId, title) {
             activeRoomId = roomId;
             document.getElementById('chat-header').innerText = title;
             document.getElementById('input-area').classList.remove('hidden');
+            document.getElementById('chat-view-screen').classList.remove('mobile-hidden');
             
-            // На мобильных устройствах переключаем видимость экранов (открываем страницу чата)
-            document.getElementById('chat-view-screen').classList.remove('mobile-page-hidden');
-            
-            document.querySelectorAll('.chat-item').forEach(e => e.classList.remove('tg-active'));
-            document.getElementById(`room-${roomId}`)?.classList.add('tg-active');
+            document.querySelectorAll('.chat-item').forEach(e => e.classList.remove('item-active'));
+            document.getElementById(`room-${roomId}`)?.classList.add('item-active');
             socket.emit('join_room', roomId);
         }
 
@@ -214,17 +213,17 @@
         }
 
         function editMessage(msgId, oldText) {
-            const newText = prompt("Редактировать сообщение:", oldText);
+            const newText = prompt("Изменить сообщение:", oldText);
             if (newText && newText.trim() !== oldText) socket.emit('edit_message', { msgId, roomId: activeRoomId, userId: me.id, newText: newText.trim() });
         }
 
         function deleteMessage(msgId) {
-            if (confirm("Удалить сообщение для всех?")) socket.emit('delete_message', { msgId, roomId: activeRoomId, userId: me.id });
+            if (confirm("Удалить сообщение?")) socket.emit('delete_message', { msgId, roomId: activeRoomId, userId: me.id });
         }
 
         function leaveRoom(e, roomId, title) {
             e.stopPropagation();
-            if (confirm(`Удалить и покинуть чат "${title}"?`)) {
+            if (confirm(`Удалить чат "${title}"?`)) {
                 socket.emit('delete_room', { roomId, userId: me.id });
                 if (activeRoomId === roomId) closeChatPage();
             }
@@ -234,8 +233,8 @@
             currentFilter = filterType;
             ['all', 'dm', 'group'].forEach(t => {
                 const btn = document.getElementById(`tab-${t}`);
-                if(t === filterType) btn.classList.add('bg-white/5', 'text-white');
-                else btn.classList.remove('bg-white/5', 'text-white');
+                if(t === filterType) btn.className = "flex-1 py-2 border-b-2 border-[#5288c1] text-white text-center";
+                else btn.className = "flex-1 py-2 border-b-2 border-transparent text-center";
             });
             renderRoomsList();
         }
@@ -250,15 +249,20 @@
             });
 
             filtered.forEach(r => {
-                const title = r.is_dm ? r.dm_name : `👥 ${r.name}`;
-                const active = r.id === activeRoomId ? 'tg-active' : '';
+                const title = r.is_dm ? r.dm_name : r.name;
+                const prefix = r.is_dm ? '' : '👥 ';
+                const fullTitle = prefix + title;
+                const active = r.id === activeRoomId ? 'item-active' : '';
+                const char = title.charAt(0);
+                const avatarBg = r.is_dm ? 'bg-slate-700 text-slate-200' : 'bg-teal-700 text-teal-100';
+
                 list.innerHTML += `
-                    <div id="room-${r.id}" onclick="selectRoom('${r.id}', '${title}')" class="chat-item flex items-center justify-between p-3 rounded-xl text-sm cursor-pointer tg-hover ${active} group">
+                    <div id="room-${r.id}" onclick="selectRoom('${r.id}', '${fullTitle}')" class="chat-item flex items-center justify-between p-2.5 rounded-lg text-sm cursor-pointer hover:bg-[#202b36] ${active} group">
                         <div class="flex items-center gap-3 truncate flex-1">
-                            <div class="w-9 h-9 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold uppercase shrink-0">${title.charAt(r.is_dm ? 0 : 2)}</div>
-                            <div class="truncate font-medium text-gray-300">${title}</div>
+                            <div class="w-10 h-10 rounded-full ${avatarBg} flex items-center justify-center text-sm font-bold uppercase shrink-0">${char}</div>
+                            <div class="truncate"><div class="font-medium text-white truncate">${title}</div><div class="text-xs text-[#708499] truncate mt-0.5">${r.is_dm ? 'личный чат' : 'группа'}</div></div>
                         </div>
-                        <button onclick="leaveRoom(event, '${r.id}', '${title}')" class="text-gray-500 hover:text-rose-400 font-bold opacity-0 group-hover:opacity-100 px-1 text-lg">&times;</button>
+                        <button onclick="leaveRoom(event, '${r.id}', '${fullTitle}')" class="text-[#708499] hover:text-rose-400 font-bold opacity-0 group-hover:opacity-100 px-2 text-lg">&times;</button>
                     </div>`;
             });
         }
@@ -275,16 +279,16 @@
             const container = document.getElementById('messages-container');
             const isMy = msg.user_id === me.id;
             const actions = isMy ? `
-                <div class="opacity-0 group-hover:opacity-100 flex gap-2 ml-2 text-[10px] text-sky-400">
-                    <span onclick="editMessage('${msg.id}', '${msg.text}')" class="cursor-pointer hover:underline">изм.</span>
-                    <span onclick="deleteMessage('${msg.id}')" class="cursor-pointer hover:underline text-rose-400">удал.</span>
-                </div>` : '';
+                <span class="opacity-0 group-hover:opacity-100 inline-flex gap-1.5 ml-2 text-[10px] text-sky-400 font-normal">
+                    <span onclick="editMessage('${msg.id}', '${msg.text}')" class="hover:underline">изм</span>
+                    <span onclick="deleteMessage('${msg.id}')" class="hover:underline text-rose-400">удал</span>
+                </span>` : '';
 
             container.innerHTML += `
                 <div id="msg-${msg.id}" class="flex flex-col group max-w-[75%] ${isMy ? 'self-end items-end' : 'self-start items-start'}">
-                    <div class="text-[10px] text-gray-400 mb-0.5 flex items-center px-1">${msg.username} ${actions}</div>
-                    <div class="p-2.5 px-4 text-sm shadow-sm ${isMy ? 'tg-msg-out text-white' : 'tg-msg-in text-gray-100'}">
-                        <div id="text-${msg.id}" class="break-words whitespace-pre-wrap leading-relaxed">${msg.text}</div>
+                    <div class="text-[10px] text-[#708499] mb-0.5 flex items-center px-1 font-normal">${msg.username} ${actions}</div>
+                    <div class="p-2.5 px-3.5 shadow-sm text-sm ${isMy ? 'msg-out-bubble text-white' : 'msg-in-bubble text-gray-100'}">
+                        <div id="text-${msg.id}" class="break-words whitespace-pre-wrap leading-tight">${msg.text}</div>
                     </div>
                 </div>`;
             container.scrollTop = container.scrollHeight;
