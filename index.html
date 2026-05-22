@@ -117,7 +117,7 @@
         <div class="window-box" id="win-messages" style="max-width: 700px;">
             <h2>Диалоги</h2>
             <div class="input-group">
-                <label>Выберите активный чат</label>
+                <label>Выберите чат</label>
                 <select id="select-active-chat" onchange="uiUpdateMessages()"></select>
             </div>
             <div class="chat-container">
@@ -161,7 +161,7 @@
     </div>
 
        <script>
-        const BACKEND_URL = 'https://ink-chat-dppr.onrender.com';
+        const BACKEND_URL = 'https://ink-cob.github.io/Ink-chaaat';
 
         function getCurrentUser() { try { return JSON.parse(sessionStorage.getItem('ink_current_user')); } catch(e){return null;} }
         function getMyFriends() { try { return JSON.parse(localStorage.getItem('ink_friends') || '[]'); } catch(e){return [];} }
