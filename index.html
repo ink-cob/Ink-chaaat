@@ -61,6 +61,7 @@
         .msg-bubble.incoming { background: var(--tg-other-msg); align-self: flex-start; border-bottom-left-radius: 4px; }
         .msg-bubble.outgoing { background: var(--tg-my-msg); align-self: flex-end; border-bottom-right-radius: 4px; }
         .msg-author { font-size: 12px; font-weight: bold; margin-bottom: 2px; color: var(--tg-active-item); }
+        .msg-actions { font-size: 11px; margin-top: 4px; display: flex; gap: 8px; justify-content: flex-end; opacity: 0.6; cursor: pointer; }
         .chat-input-area { display: flex; padding: 10px; background: var(--tg-bg); border-top: 1px solid var(--tg-border); gap: 8px; }
         .chat-input-area input { margin: 0; }
         .chat-input-area .btn-tg { width: auto; margin: 0; padding: 0 20px; }
@@ -93,7 +94,6 @@
     </div>
 
     <div id="workspace">
-        <!-- ОКНО АВТОРИЗАЦИИ И РЕГИСТРАЦИИ -->
         <div class="window-box active" id="win-auth">
             <h2>Вход в Ink chat</h2>
             <div id="auth-form-block">
@@ -112,7 +112,6 @@
             </div>
         </div>
 
-        <!-- ОКНО ЧАТА -->
         <div class="window-box" id="win-messages" style="max-width: 700px;">
             <h2>Диалоги</h2>
             <div class="input-group">
@@ -125,18 +124,17 @@
                     <input type="hidden" id="edit-msg-id">
                     <input type="text" id="message-input" placeholder="Напишите сообщение...">
                     <button class="btn-tg" id="btn-send-msg" onclick="actionSendMessage()">Отправить</button>
+                    <button class="btn-tg" id="btn-save-edit-msg" style="display:none;" onclick="actionSaveEditedMessage()">Сохранить</button>
                 </div>
             </div>
         </div>
 
-        <!-- ОКНО ПОИСКА ДРУЗЕЙ -->
         <div class="window-box" id="win-friends-find">
             <h2>Добавить друга по ID</h2>
             <div class="input-group"><label>Десятизначный ID</label><input type="text" id="search-friend-name" placeholder="Например: 4829104952"></div>
             <button class="btn-tg" onclick="actionFindFriend()">Добавить в контакты</button>
         </div>
 
-        <!-- ОКНО СОЗДАНИЯ ГРУППЫ -->
         <div class="window-box" id="win-group-create">
             <h2>Создание приватной группы</h2>
             <div class="input-group"><label>Название группы</label><input type="text" id="new-group-name" placeholder="Например: Семья"></div>
@@ -147,7 +145,6 @@
             <button class="btn-tg" onclick="actionCreateGroup()">Объединить в группу</button>
         </div>
 
-        <!-- ОКНО ПРОФИЛЯ -->
         <div class="window-box" id="win-profile">
             <h2>Настройки профиля</h2>
             <div class="input-group"><label>Ваш ID</label><input type="text" id="prof-id" readonly></div>
@@ -157,10 +154,8 @@
             <button class="btn-tg" onclick="actionSaveProfile()">Сохранить изменения</button>
         </div>
     </div>
-
     <script>
-        const BACKEND_URL = 'https://ink-chat-dppr.onrender.com';
-
+        const BACKEND_URL = 'https://onrender.com';
 
         function getCurrentUser() { try { return JSON.parse(sessionStorage.getItem('ink_current_user')); } catch(e){return null;} }
         function getMyFriends() { try { return JSON.parse(localStorage.getItem('ink_friends') || '[]'); } catch(e){return [];} }
@@ -417,6 +412,50 @@
             } catch(e){}
         }
 
+        // Вызов окна изменения своего сообщения
+        function startEditMessage(id, text) {
+            document.getElementById('message-input').value = text;
+            document.getElementById('edit-msg-id').value = id;
+            document.getElementById('btn-send-msg').style.display = 'none';
+            document.getElementById('btn-save-edit-msg').style.display = 'inline-block';
+        }
+
+        // Сохранение изменений редактируемого сообщения
+        async function actionSaveEditedMessage() {
+            let u = getCurrentUser();
+            const id = document.getElementById('edit-msg-id').value;
+            const newText = document.getElementById('message-input').value.trim();
+            if(!newText) return;
+
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/messages/edit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, username: u.name, newText })
+                });
+                if (!res.ok) { let d = await res.json(); alert(d.error); }
+                
+                document.getElementById('message-input').value = '';
+                document.getElementById('btn-send-msg').style.display = 'inline-block';
+                document.getElementById('btn-save-edit-msg').style.display = 'none';
+                uiUpdateMessages();
+            } catch(e){}
+        }
+
+        // Запрос на удаление сообщения с диска
+        async function actionDeleteMessage(id) {
+            let u = getCurrentUser();
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/messages/delete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, username: u.name })
+                });
+                if (!res.ok) { let d = await res.json(); alert(d.error); }
+                uiUpdateMessages();
+            } catch(e){}
+        }
+
         async function uiUpdateMessages() {
             let u = getCurrentUser();
             const chat = document.getElementById('ui-chat-messages');
@@ -463,10 +502,18 @@
                     let info = checkData.statuses[m.sender] || { isVerified: false };
                     let badge = info.isVerified ? ' ☑️' : '';
 
+                    // Кнопки управления собственным сообщением
+                    const actionsHtml = isMyMsg ? `
+                        <div class="msg-actions">
+                            <span onclick="startEditMessage('${m.id}', '${escapeHTML(m.text)}')">✏️</span>
+                            <span onclick="actionDeleteMessage('${m.id}')">❌</span>
+                        </div>` : '';
+
                     chat.innerHTML += `
                         <div class="msg-bubble ${isMyMsg ? 'outgoing' : 'incoming'}">
                             ${!isMyMsg ? `<div class="msg-author">${escapeHTML(m.sender)}${badge}</div>` : ''}
                             <div>${escapeHTML(m.text)}${statusCheck}</div>
+                            ${actionsHtml}
                         </div>`;
                 });
                 chat.scrollTop = chat.scrollHeight;

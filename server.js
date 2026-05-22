@@ -10,35 +10,37 @@ const server = http.createServer(app);
 app.use(cors());
 app.use(express.json());
 
-// ПУТИ К ФАЙЛАМ НАШЕЙ ВЕЧНОЙ БАЗЫ ДАННЫХ
-// ИСПРАВЛЕННЫЕ ПУТИ: Сохраняем базу в системную временную папку, где разрешена запись
+// Системная временная папка, в которой на Render разрешена запись файлов
 const USERS_FILE = '/tmp/db_users.json';
 const MESSAGES_FILE = '/tmp/db_messages.json';
 const GROUPS_FILE = '/tmp/db_groups.json';
 
-
-// Структура базы данных по умолчанию
 let db = { users: [], messages: [], groups: [] };
 
-// Функция безопасного чтения данных с диска при старте сервера
+// Функция безопасного чтения и автоматического создания базы данных
 const loadDatabase = () => {
     try {
-        if (fs.existsSync(USERS_FILE)) db.users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
-        if (fs.existsSync(MESSAGES_FILE)) db.messages = JSON.parse(fs.readFileSync(MESSAGES_FILE, 'utf8'));
-        if (fs.existsSync(GROUPS_FILE)) db.groups = JSON.parse(fs.readFileSync(GROUPS_FILE, 'utf8'));
-        console.log(" ВЕЧНАЯ БАЗА ДАННЫХ УСПЕШНО ЗАГРУЖЕНА С ДИСКА");
+        if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, '[]', 'utf8');
+        if (!fs.existsSync(MESSAGES_FILE)) fs.writeFileSync(MESSAGES_FILE, '[]', 'utf8');
+        if (!fs.existsSync(GROUPS_FILE)) fs.writeFileSync(GROUPS_FILE, '[]', 'utf8');
+
+        db.users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+        db.messages = JSON.parse(fs.readFileSync(MESSAGES_FILE, 'utf8'));
+        db.groups = JSON.parse(fs.readFileSync(GROUPS_FILE, 'utf8'));
         
-        // Создаем дефолтного админа Inker, если база пустая
+        console.log("ВЕЧНАЯ БАЗА ДАННЫХ УСПЕШНО ЗАГРУЖЕНА");
+        
         if (db.users.length === 0) {
             db.users.push({ id: "1000000001", name: "Inker", pass: "admin", created_at: "16.02.2026", last_seen: Date.now(), isVerified: true });
-            saveData(USERS_FILE, db.users);
+            fs.writeFileSync(USERS_FILE, JSON.stringify(db.users, null, 2), 'utf8');
         }
     } catch (e) {
-        console.error("Ошибка чтения файлов БД, сброс на чистую память:", e);
+        console.error("Критический сбой базы данных:", e);
+        db = { users: [], messages: [], groups: [] };
     }
 };
 
-// Функция мгновенной записи изменений на диск (чтобы ничего не пропало)
+// Функция мгновенной записи изменений на диск
 const saveData = (filePath, dataArray) => {
     try {
         fs.writeFileSync(filePath, JSON.stringify(dataArray, null, 2), 'utf8');
@@ -47,7 +49,6 @@ const saveData = (filePath, dataArray) => {
     }
 };
 
-// Обновление статуса "В сети" (хранится в оперативной памяти текущей сессии)
 const updateHeartbeat = (username) => {
     if (!username) return;
     let user = db.users.find(u => u.name.toLowerCase() === username.toLowerCase());
@@ -68,13 +69,11 @@ app.post('/api/register', (req, res) => {
         return res.status(400).json({ error: "Это имя уже занято!" });
     }
     
-    // Секретная проверка админ-кода происходит строго здесь, скрытно от фронтенда
     const isVerified = (pass === "Ink_Admin_2552m");
-
     const newUser = { id, name, pass, created_at, last_seen: Date.now(), isVerified };
     db.users.push(newUser);
     
-    saveData(USERS_FILE, db.users); // Сохраняем на диск
+    saveData(USERS_FILE, db.users);
     res.json({ success: true, user: newUser });
 });
 
@@ -86,6 +85,7 @@ app.post('/api/login', (req, res) => {
     res.json({ success: true, user });
 });
 
+// ИСПРАВЛЕНО: Полное сохранение изменений профиля на сервере
 app.post('/api/profile/update', (req, res) => {
     const { userId, newName, newPass } = req.body;
     if (!userId || !newName || !newPass) return res.status(400).json({ error: "Поля не могут быть пустыми!" });
@@ -175,7 +175,7 @@ app.post('/api/messages/send', (req, res) => {
     const newMsg = { id: Date.now(), sender, target, recipient, text, read: false };
     db.messages.push(newMsg);
     
-    saveData(MESSAGES_FILE, db.messages); // Сохраняем на диск
+    saveData(MESSAGES_FILE, db.messages);
     res.json({ success: true });
 });
 
@@ -193,6 +193,30 @@ app.post('/api/messages/read', (req, res) => {
     res.json({ success: true });
 });
 
+// ИСПРАВЛЕНО: Исправлено удаление сообщений и синхронизация с диском
+app.post('/api/messages/delete', (req, res) => {
+    const { id, username } = req.body;
+    let msg = db.messages.find(m => String(m.id) === String(id));
+    if (msg && msg.sender === username) {
+        db.messages = db.messages.filter(m => String(m.id) !== String(id));
+        saveData(MESSAGES_FILE, db.messages);
+        return res.json({ success: true });
+    }
+    res.status(400).json({ error: "Нельзя удалить это сообщение" });
+});
+
+// ИСПРАВЛЕНО: Исправлено изменение текста сообщений и синхронизация с диском
+app.post('/api/messages/edit', (req, res) => {
+    const { id, username, newText } = req.body;
+    let msg = db.messages.find(m => String(m.id) === String(id));
+    if (msg && msg.sender === username) {
+        msg.text = newText;
+        saveData(MESSAGES_FILE, db.messages);
+        return res.json({ success: true });
+    }
+    res.status(400).json({ error: "Нельзя изменить это сообщение" });
+});
+
 app.get('/api/groups', (req, res) => res.json({ groups: db.groups }));
 
 app.post('/api/groups/create', (req, res) => {
@@ -208,8 +232,7 @@ app.post('/api/groups/create', (req, res) => {
     res.json({ success: true });
 });
 
-// Загружаем сохраненную базу данных перед стартом портов
 loadDatabase();
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Сервер успешно запущен на порту ${PORT}`));
+server.listen(PORT, () => console.log(`Сервер успешно запущен`));
