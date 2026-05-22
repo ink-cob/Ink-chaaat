@@ -160,7 +160,7 @@
         </div>
     </div>
 
-    <script>
+       <script>
         const BACKEND_URL = 'https://onrender.com';
 
         function getCurrentUser() { try { return JSON.parse(sessionStorage.getItem('ink_current_user')); } catch(e){return null;} }
@@ -218,7 +218,6 @@
             document.getElementById('edit-profile-password').value = u.pass;
         }
 
-        // --- ДЕЙСТВИЯ С СЕРВЕРОМ ---
         async function actionRegister() {
             const name = document.getElementById('reg-username').value.trim();
             const pass = document.getElementById('reg-password').value.trim();
@@ -475,7 +474,6 @@
             } catch(e){}
         }
 
-        // Фоновые интервалы обновлений
         setInterval(async () => {
             let u = getCurrentUser(); if(!u) return;
             try { await fetch(`${BACKEND_URL}/api/heartbeat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u.name }) }); } catch(e){}
@@ -486,6 +484,26 @@
             if(document.getElementById('win-messages').classList.contains('active')) { uiUpdateMessages(); }
         }, 4000);
     </script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const themeToggleBtn = document.getElementById('theme-toggle');
+            if (!themeToggleBtn) return;
+
+            const savedTheme = localStorage.getItem('ink_theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            themeToggleBtn.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+
+            themeToggleBtn.addEventListener('click', () => {
+                const currentTheme = document.documentElement.getAttribute('data-theme');
+                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                document.documentElement.setAttribute('data-theme', newTheme);
+                localStorage.setItem('ink_theme', newTheme);
+                themeToggleBtn.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+            });
+        });
+    </script>
+
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const themeToggleBtn = document.getElementById('theme-toggle');
