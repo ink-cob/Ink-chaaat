@@ -11,9 +11,11 @@ app.use(cors());
 app.use(express.json());
 
 // ПУТИ К ФАЙЛАМ НАШЕЙ ВЕЧНОЙ БАЗЫ ДАННЫХ
-const USERS_FILE = path.join(__dirname, 'db_users.json');
-const MESSAGES_FILE = path.join(__dirname, 'db_messages.json');
-const GROUPS_FILE = path.join(__dirname, 'db_groups.json');
+// ИСПРАВЛЕННЫЕ ПУТИ: Сохраняем базу в системную временную папку, где разрешена запись
+const USERS_FILE = '/tmp/db_users.json';
+const MESSAGES_FILE = '/tmp/db_messages.json';
+const GROUPS_FILE = '/tmp/db_groups.json';
+
 
 // Структура базы данных по умолчанию
 let db = { users: [], messages: [], groups: [] };
