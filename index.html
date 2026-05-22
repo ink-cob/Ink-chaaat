@@ -1,28 +1,283 @@
-                    // Формируем финальный HTML-контейнер для облачка сообщения
-                    const bubbleClass = isMyMsg ? 'outgoing' : 'incoming';
-                    chat.innerHTML += `
-                        <div class="msg-bubble ${bubbleClass}">
-                            ${!isMyMsg ? `<div class="msg-author">${escapeHTML(m.sender)}${badge}</div>` : ''}
-                            <div>${escapeHTML(m.text)}${statusCheck}</div>
-                            ${actionsHtml}
-                        </div>`;
-                });
-                chat.scrollTop = chat.scrollHeight;
-            } catch(e){}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ink chat</title>
+    <style>
+        /* Переменные для СВЕТЛОЙ темы */
+        :root {
+            --tg-bg: #ffffff;
+            --tg-sidebar-bg: #ffffff;
+            --tg-active-item: #2f8ccd;
+            --tg-text: #000000;
+            --tg-text-muted: #707579;
+            --tg-border: #dfdfdf;
+            --tg-btn-hover: #f4f4f5;
+            --tg-chat-bg: #f4f4f5;
+            --tg-my-msg: #eeffde;
+            --tg-other-msg: #ffffff;
+            --tg-danger: #e53935;
         }
 
-        // Переопределяем базовый URL для работы с вашим хостингом на Render
+        /* Переменные для ТЕМНОЙ темы */
+        :root[data-theme="dark"] {
+            --tg-bg: #182533;
+            --tg-sidebar-bg: #17212b;
+            --tg-active-item: #5288c1;
+            --tg-text: #f5f5f5;
+            --tg-text-muted: #7f91a4;
+            --tg-border: #101921;
+            --tg-btn-hover: #202b36;
+            --tg-chat-bg: #0e1621;
+            --tg-my-msg: #2b5278;
+            --tg-other-msg: #182533;
+            --tg-danger: #ec3942;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+        body { display: flex; height: 100vh; background: var(--tg-bg); color: var(--tg-text); overflow: hidden; position: relative; }
+        
+        #mobile-menu-toggle {
+            display: none; position: absolute; top: 12px; left: 12px; z-index: 100;
+            background: var(--tg-active-item); color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer;
+        }
+
+        #left-menu { 
+            width: 320px; min-width: 320px; background: var(--tg-sidebar-bg); 
+            border-right: 1px solid var(--tg-border); display: flex; flex-direction: column; z-index: 10;
+        }
+        
+        .sidebar-header { padding: 16px; border-bottom: 1px solid var(--tg-border); display: flex; justify-content: space-between; align-items: flex-start; }
+        .sidebar-header h2 { font-size: 20px; font-weight: bold; color: var(--tg-active-item); }
+        .user-badge { font-size: 13px; color: var(--tg-text-muted); }
+
+        .theme-toggle-btn { background: none; border: none; font-size: 20px; cursor: pointer; padding: 4px 8px; border-radius: 5px; }
+        .theme-toggle-btn:hover { background: var(--tg-btn-hover); }
+
+        .menu-scroll { flex: 1; overflow-y: auto; padding: 8px 0; }
+        .menu-section-title { font-size: 12px; font-weight: bold; text-transform: uppercase; color: var(--tg-active-item); padding: 12px 20px 6px 20px; }
+        
+        .menu-btn { 
+            width: 100%; padding: 12px 20px; border: none; background: transparent; 
+            color: var(--tg-text); cursor: pointer; text-align: left; font-size: 14px; 
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .menu-btn:hover { background: var(--tg-btn-hover); }
+        .menu-btn.active-tab { background: var(--tg-btn-hover); color: var(--tg-active-item); font-weight: 500; border-left: 3px solid var(--tg-active-item); }
+
+        #workspace { flex: 1; background: var(--tg-chat-bg); display: flex; justify-content: center; align-items: center; padding: 20px; width: 100%; }
+        
+        .window-box { 
+            background: var(--tg-bg); padding: 32px; border-radius: 12px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05); width: 100%; max-width: 460px; display: none; max-height: 90vh; overflow-y: auto;
+        }
+        .window-box.active { display: block; }
+
+        .input-group { margin-bottom: 14px; }
+        .input-group label { display: block; font-size: 12px; color: var(--tg-text-muted); margin-bottom: 4px; }
+        input, select { 
+            width: 100%; padding: 11px 16px; border: 1px solid var(--tg-border); 
+            border-radius: 8px; font-size: 14px; outline: none; background: var(--tg-sidebar-bg); color: var(--tg-text);
+        }
+
+        .checkbox-group-box {
+            max-height: 120px; overflow-y: auto; border: 1px solid var(--tg-border);
+            border-radius: 8px; padding: 10px; background: var(--tg-chat-bg); margin-top: 5px;
+        }
+        .checkbox-item { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 14px; }
+
+        .btn-tg { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; background: var(--tg-active-item); color: white; margin-top: 8px; }
+        .btn-tg-secondary { background: transparent; color: var(--tg-active-item); border: 1px solid var(--tg-border); }
+        .switch-auth-mode { text-align: center; margin-top: 16px; font-size: 13px; color: var(--tg-active-item); cursor: pointer; }
+
+        .chat-container { display: flex; flex-direction: column; height: 450px; background: var(--tg-chat-bg); border: 1px solid var(--tg-border); border-radius: 12px; overflow: hidden; }
+        .chat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+        
+        .msg-bubble { max-width: 75%; padding: 8px 14px; border-radius: 12px; font-size: 14px; position: relative; color: var(--tg-text); display: inline-block; }
+        .msg-bubble.incoming { background: var(--tg-other-msg); align-self: flex-start; border-bottom-left-radius: 4px; }
+        .msg-bubble.outgoing { background: var(--tg-my-msg); align-self: flex-end; border-bottom-right-radius: 4px; }
+        
+        .msg-author { font-size: 12px; font-weight: bold; color: var(--tg-active-item); margin-bottom: 2px; }
+        .msg-actions { font-size: 11px; margin-top: 4px; display: flex; gap: 8px; justify-content: flex-end; opacity: 0.6; cursor: pointer; }
+        
+        .chat-input-area { display: flex; padding: 10px; background: var(--tg-bg); border-top: 1px solid var(--tg-border); gap: 8px; }
+        .chat-input-area input { margin: 0; }
+        .chat-input-area .btn-tg { width: auto; margin: 0; padding: 0 20px; }
+
+        #push-notification {
+            position: fixed; top: -100px; left: 50%; transform: translateX(-50%);
+            background: #323232; color: white; padding: 12px 24px; border-radius: 25px; font-size: 14px; z-index: 1000; transition: top 0.4s;
+        }
+        #push-notification.show { top: 20px; }
+
+        @media (max-width: 768px) {
+            #mobile-menu-toggle { display: block; }
+            #left-menu { position: absolute; left: -320px; top: 0; bottom: 0; transition: left 0.3s; }
+            #left-menu.open { left: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <button id="mobile-menu-toggle" onclick="toggleMobileMenu()">☰ Меню</button>
+    <button class="theme-toggle-btn" id="theme-toggle" style="position: absolute; top: 12px; right: 12px; z-index: 100;">🌙</button>
+    <div id="push-notification">🔔 <span id="push-text"></span></div>
+
+    <div id="left-menu">
+        <div class="sidebar-header">
+            <h2>Ink chat</h2>
+            <div class="user-badge">Аккаунт: <span id="current-user-label" style="font-weight:bold;">Гость</span></div>
+        </div>
+        
+        <div class="menu-scroll">
+            <div class="menu-section-title">Сессия</div>
+            <button class="menu-btn active-tab" id="tab-win-auth" onclick="switchWindow('win-auth')">🔑 Авторизация / Регистрация</button>
+            <button class="menu-btn" id="tab-win-messages" onclick="switchWindow('win-messages'); uiUpdateChatSelection();">💬 Сообщения</button>
+            
+            <div class="menu-section-title">Контакты</div>
+            <button class="menu-btn" id="tab-win-friends-find" onclick="switchWindow('win-friends-find');">🔍 Поиск по ID</button>
+            
+            <div class="menu-section-title">Настройки</div>
+            <button class="menu-btn" id="tab-win-profile" onclick="switchWindow('win-profile'); uiUpdateProfile();">👤 Мой профиль</button>
+            <button class="menu-btn" id="tab-win-group-create" onclick="switchWindow('win-group-create'); uiRenderGroupCreationList();">👥 Создать группу</button>
+        </div>
+    </div>
+
+    <div id="workspace">
+        <!-- ОКНО АВТОРИЗАЦИИ И РЕГИСТРАЦИИ -->
+        <div class="window-box active" id="win-auth">
+            <h2>Вход в Ink chat</h2>
+            <div id="auth-form-block">
+                <div class="input-group"><label>Имя пользователя</label><input type="text" id="auth-username"></div>
+                <div class="input-group"><label>Пароль</label><input type="password" id="auth-password"></div>
+                <button class="btn-tg" onclick="actionLogin()">Войти</button>
+                <div class="switch-auth-mode" onclick="toggleAuthMode(false)">Нет аккаунта? Зарегистрироваться</div>
+            </div>
+            
+            <div id="reg-form-block" style="display:none;">
+                <div class="input-group"><label>Придумайте имя</label><input type="text" id="reg-username"></div>
+                <div class="input-group"><label>Пароль (Для галочки: Ink_Admin_2552m)</label><input type="password" id="reg-password"></div>
+                <div class="input-group"><label>Повторите пароль</label><input type="password" id="reg-password-confirm"></div>
+                <button class="btn-tg btn-tg-secondary" id="btn-toggle-reg-pass" onclick="toggleRegisterPassword()" style="margin-bottom:10px; padding:6px; font-size:12px;">👁️ Показать код</button>
+                <button class="btn-tg" onclick="actionRegister()">Создать аккаунт</button>
+                <div class="switch-auth-mode" onclick="toggleAuthMode(true)">Уже есть аккаунт? Войти</div>
+            </div>
+        </div>
+
+        <!-- ОКНО СООБЩЕНИЙ -->
+        <div class="window-box" id="win-messages">
+            <h2>Ваши диалоги</h2>
+            <div class="input-group">
+                <label>Выберите активный чат или группу</label>
+                <select id="select-active-chat" onchange="uiChangeChat()"></select>
+            </div>
+            <div class="chat-container">
+                <div class="chat-messages" id="ui-chat-messages"></div>
+                <div class="chat-input-area">
+                    <input type="hidden" id="edit-msg-id">
+                    <input type="text" id="message-input" placeholder="Напишите сообщение...">
+                    <button class="btn-tg" id="btn-send-msg" onclick="actionSendMessage()">Отправить</button>
+                    <button class="btn-tg" id="btn-save-edit-msg" style="display:none;" onclick="actionSaveEditedMessage()">Сохранить</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ОКНО ПОИСКА ДРУЗЕЙ -->
+        <div class="window-box" id="win-friends-find">
+            <h2>Добавить друга по ID</h2>
+            <div class="input-group"><label>Десятизначный ID пользователя</label><input type="text" id="search-friend-name" placeholder="Например: 4829104952"></div>
+            <button class="btn-tg" onclick="actionFindFriend()">Добавить в контакты</button>
+        </div>
+
+        <!-- ОКНО СОЗДАНИЯ ПРИВАТНОЙ ГРУППЫ -->
+        <div class="window-box" id="win-group-create">
+            <h2>Создание приватной группы</h2>
+            <div class="input-group"><label>Название группы</label><input type="text" id="new-group-name" placeholder="Например: Разработчики"></div>
+            <div class="input-group">
+                <label>Выберите участников из списка друзей</label>
+                <div class="checkbox-group-box" id="group-friends-checkboxes"></div>
+            </div>
+            <button class="btn-tg" onclick="actionCreateGroup()">Объединить в группу</button>
+        </div>
+
+        <!-- ОКНО ПРОФИЛЯ -->
+        <div class="window-box" id="win-profile">
+            <h2>Ваш профиль</h2>
+            <div class="input-group"><label>Ваш личный ID</label><input type="text" id="prof-id" readonly style="opacity:0.7;"></div>
+            <div class="input-group"><label>Дата создания</label><input type="text" id="prof-date" readonly style="opacity:0.7;"></div>
+            <div class="input-group"><label>Изменить никнейм</label><input type="text" id="edit-profile-name"></div>
+            <div class="input-group"><label>Новый пароль</label><input type="password" id="edit-profile-password" placeholder="Введите новый пароль"></div>
+            <button class="btn-tg" onclick="actionSaveProfile()">Сохранить изменения</button>
+        </div>
+    </div>
+
+    <script>
         const BACKEND_URL = 'https://onrender.com';
 
-        // Модифицированная регистрация с проверкой повтора пароля
+        function getCurrentUser() {
+            try { return JSON.parse(sessionStorage.getItem('ink_current_user')); } catch(e) { return null; }
+        }
+        function getMyFriends() {
+            try { return JSON.parse(localStorage.getItem('ink_friends') || '[]'); } catch(e) { return []; }
+        }
+        function saveMyFriends(arr) {
+            localStorage.setItem('ink_friends', JSON.stringify(arr));
+        }
+
+        function switchWindow(id) {
+            document.querySelectorAll('.window-box').forEach(w => w.classList.remove('active'));
+            document.querySelectorAll('.menu-btn').forEach(b => b.classList.remove('active-tab'));
+            const targetWin = document.getElementById(id);
+            if(targetWin) targetWin.classList.add('active');
+            const targetTab = document.getElementById('tab-' + id);
+            if(targetTab) targetTab.classList.add('active-tab');
+        }
+
+        function toggleAuthMode(showLogin) {
+            document.getElementById('auth-form-block').style.display = showLogin ? 'block' : 'none';
+            document.getElementById('reg-form-block').style.display = showLogin ? 'none' : 'block';
+        }
+
+        function showPushNotification(text) {
+            const push = document.getElementById('push-notification');
+            document.getElementById('push-text').innerText = text;
+            push.classList.add('show');
+            setTimeout(() => { push.classList.remove('show'); }, 4000);
+        }
+
+        function generateTenDigitID() {
+            return Math.floor(1000000000 + Math.random() * 9000000000).toString();
+        }
+
+        function toggleMobileMenu() {
+            document.getElementById('left-menu').classList.toggle('open');
+        }
+
+        function escapeHTML(str) {
+            if (!str) return '';
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+
+        function toggleRegisterPassword() {
+            const p1 = document.getElementById('reg-password');
+            const p2 = document.getElementById('reg-password-confirm');
+            const btn = document.getElementById('btn-toggle-reg-pass');
+            if(p1.type === 'password') {
+                p1.type = 'text'; if(p2) p2.type = 'text';
+                btn.innerText = '👁️ Скрыть код';
+            } else {
+                p1.type = 'password'; if(p2) p2.type = 'password';
+                btn.innerText = '👁️ Показать код';
+            }
+        }
+
         async function actionRegister() {
             const name = document.getElementById('reg-username').value.trim();
             const pass = document.getElementById('reg-password').value.trim();
             const passConfirm = document.getElementById('reg-password-confirm').value.trim();
-            
             if(!name || !pass || !passConfirm) return alert("Заполните все поля!");
             if(pass !== passConfirm) return alert("Пароли не совпадают!");
-            
             const randID = generateTenDigitID();
             const today = new Date().toLocaleDateString('ru-RU');
 
@@ -43,11 +298,57 @@
             } catch (err) { alert("Ошибка сервера"); }
         }
 
-        // Объединение выбранных друзей из чекбоксов в приватную группу
+        async function actionLogin() {
+            const name = document.getElementById('auth-username').value.trim();
+            const pass = document.getElementById('auth-password').value.trim();
+            if(!name || !pass) return alert("Заполните все поля!");
+            
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, pass })
+                });
+                const data = await res.json();
+                if (!res.ok) return alert(data.error);
+                
+                sessionStorage.setItem('ink_current_user', JSON.stringify(data.user));
+                uiSyncUserLabel();
+                showPushNotification(`Вы вошли как ${data.user.name}`);
+                switchWindow('win-messages');
+                uiUpdateChatSelection();
+            } catch (err) { alert("Сервер недоступен"); }
+        }
+
+        async function actionFindFriend() {
+            let myFriends = getMyFriends();
+            let currentUser = getCurrentUser();
+            if(!currentUser) return alert("Сначала авторизуйтесь!");
+            const searchId = document.getElementById('search-friend-name').value.trim();
+            if(!searchId) return alert("Введите ID!");
+            if (String(searchId) === String(currentUser.id)) return alert("Это ваш личный ID!");
+
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/find-user?searchId=${searchId}`);
+                const data = await res.json();
+                if (!data.matches) return alert("Пользователь с таким ID не найден!");
+
+                let targetUser = data.matches;
+                if (myFriends.some(f => String(f.id) === String(targetUser.id))) return alert("Этот пользователь уже есть в списке друзей!");
+
+                myFriends.push({ id: targetUser.id, name: targetUser.name, blocked: false });
+                saveMyFriends(myFriends);
+                document.getElementById('search-friend-name').value = '';
+                showPushNotification(`Контакт "${targetUser.name}" успешно добавлен!`);
+                uiUpdateChatSelection();
+                switchWindow('win-messages');
+            } catch (err) { alert("Ошибка поиска на сервере"); }
+        }
+
         async function actionCreateGroup() {
             const gName = document.getElementById('new-group-name').value.trim();
             let currentUser = getCurrentUser();
-            if (!gName) return alert("Введите название группы!");
+            if (!gName) return alert("Укажите название группы!");
 
             const checkboxes = document.querySelectorAll('.group-member-checkbox:checked');
             let members = Array.from(checkboxes).map(cb => cb.value);
@@ -68,7 +369,6 @@
             } catch (err) { alert("Ошибка создания группы"); }
         }
 
-        // Отрисовка списка чекбоксов друзей для создания приватной группы
         function uiRenderGroupCreationList() {
             const container = document.getElementById('group-friends-checkboxes');
             if (!container) return;
@@ -76,27 +376,23 @@
             let myFriends = getMyFriends();
 
             if (myFriends.length === 0) {
-                container.innerHTML = '<div style="font-size:12px; color:var(--tg-text-muted); padding:5px;">У вас нет друзей для добавления</div>';
+                container.innerHTML = '<div style="font-size:12px; color:var(--tg-text-muted);">Список друзей пуст</div>';
                 return;
             }
-
             myFriends.forEach(f => {
                 container.innerHTML += `
                     <label class="checkbox-item">
                         <input type="checkbox" class="group-member-checkbox" value="${f.name}">
                         <span>${f.name}</span>
-                    </label>
-                `;
+                    </label>`;
             });
         }
 
-        // Сохранение отредактированного профиля (Имя и Пароль)
         async function actionSaveProfile() {
             let currentUser = getCurrentUser();
             const newName = document.getElementById('edit-profile-name').value.trim();
             const newPass = document.getElementById('edit-profile-password').value.trim();
-
-            if (!newName || !newPass) return alert("Поля не могут быть пустыми!");
+            if (!newName || !newPass) return alert("Заполните имя и пароль!");
 
             try {
                 const res = await fetch(`${BACKEND_URL}/api/profile/update`, {
@@ -110,78 +406,179 @@
                 sessionStorage.setItem('ink_current_user', JSON.stringify(data.user));
                 uiSyncUserLabel();
                 uiUpdateProfile();
-                showPushNotification("Данные успешно сохранены!");
-            } catch (err) { alert("Ошибка обновления профиля"); }
+                showPushNotification("Профиль изменен!");
+            } catch (err) { alert("Ошибка сохранения изменений"); }
         }
 
-        // Переключение видимости символов пароля при регистрации ("Показать код")
-        function toggleRegisterPassword() {
-            const passInput = document.getElementById('reg-password');
-            const confirmInput = document.getElementById('reg-password-confirm');
-            const btn = document.getElementById('btn-toggle-reg-pass');
-            
-            if (passInput.type === 'password') {
-                passInput.type = 'text';
-                if(confirmInput) confirmInput.type = 'text';
-                btn.innerText = '👁️ Скрыть код';
-            } else {
-                passInput.type = 'password';
-                if(confirmInput) confirmInput.type = 'password';
-                btn.innerText = '👁️ Показать код';
+        async function actionSendMessage() {
+            let currentUser = getCurrentUser();
+            const txt = document.getElementById('message-input').value.trim();
+            const targetChat = document.getElementById('select-active-chat').value;
+            if(!txt || !targetChat) return;
+
+            let isGroup = targetChat.startsWith("Группа: ");
+            let cleanTarget = targetChat.split(" | ")[0];
+            let recipientName = isGroup ? null : cleanTarget.replace("ЛС: ", "");
+
+            try {
+                await fetch(`${BACKEND_URL}/api/messages/send`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sender: currentUser.name, target: cleanTarget, recipient: recipientName, text: txt })
+                });
+                uiUpdateMessages();
+                document.getElementById('message-input').value = '';
+            } catch (err) { alert("Ошибка отправки"); }
+        }
+
+        async function actionDeleteMessage(id) {
+            let currentUser = getCurrentUser();
+            try {
+                await fetch(`${BACKEND_URL}/api/messages/delete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, username: currentUser.name })
+                });
+                uiUpdateMessages();
+            } catch (e){}
+        }
+
+        function actionEditMessage(id, oldText) {
+            document.getElementById('message-input').value = oldText;
+            document.getElementById('edit-msg-id').value = id;
+            document.getElementById('btn-send-msg').style.display = 'none';
+            document.getElementById('btn-save-edit-msg').style.display = 'block';
+        }
+
+        async function actionSaveEditedMessage() {
+            let currentUser = getCurrentUser();
+            const id = document.getElementById('edit-msg-id').value;
+            const newTxt = document.getElementById('message-input').value.trim();
+            try {
+                await fetch(`${BACKEND_URL}/api/messages/edit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, username: currentUser.name, newText: newTxt })
+                });
+                uiUpdateMessages();
+                document.getElementById('message-input').value = '';
+                document.getElementById('btn-send-msg').style.display = 'block';
+                document.getElementById('btn-save-edit-msg').style.display = 'none';
+            } catch (e){}
+        }
+
+        function uiSyncUserLabel() {
+            let currentUser = getCurrentUser();
+            if(currentUser) {
+                const badge = currentUser.isVerified ? " ☑️" : "";
+                document.getElementById('current-user-label').innerHTML = escapeHTML(currentUser.name) + badge;
             }
         }
 
-        // Поддержание активности «В сети» и автообновление сообщений каждые 3 секунды
-        function startHeartbeat() {
-            setInterval(async () => {
-                let currentUser = getCurrentUser();
-                if (!currentUser) return;
-                try {
-                    await fetch(`${BACKEND_URL}/api/heartbeat`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username: currentUser.name })
-                    });
-                } catch (e) {}
-            }, 5000);
+        function uiUpdateNotifyBadge() {}
+
+        function uiUpdateProfile() {
+            let currentUser = getCurrentUser();
+            if(!currentUser) return;
+            document.getElementById('prof-id').value = currentUser.id;
+            document.getElementById('prof-date').value = currentUser.created_at || '16.02.2026';
+            document.getElementById('edit-profile-name').value = currentUser.name;
+            document.getElementById('edit-profile-password').value = currentUser.pass || '';
         }
 
-        function startAutoRefresh() {
-            setInterval(async () => {
-                let currentUser = getCurrentUser();
-                if (!currentUser) return;
-                const activeWin = document.querySelector('.window-box.active');
-                if (activeWin && activeWin.id === 'win-messages') {
-                    await uiUpdateMessages();
+        async function uiUpdateChatSelection() {
+            let currentUser = getCurrentUser();
+            if(!currentUser) return;
+            const selectChat = document.getElementById('select-active-chat');
+            if(!selectChat) return;
+            const previousSelection = selectChat.value;
+
+            try {
+                const dialogsRes = await fetch(`${BACKEND_URL}/api/active-dialogs?username=${currentUser.name}`);
+                const dialogsData = await dialogsRes.json();
+
+                let namesToCheck = dialogsData.dialogs.map(d => d.name);
+                getMyFriends().forEach(f => { if(!namesToCheck.includes(f.name)) namesToCheck.push(f.name); });
+
+                const statusRes = await fetch(`${BACKEND_URL}/api/users/status`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ usernames: namesToCheck })
+                });
+                const statusData = await statusRes.json();
+
+                selectChat.innerHTML = '';
+                let renderedNames = [];
+
+                dialogsData.dialogs.forEach(d => {
+                    renderedNames.push(d.name);
+                    let info = statusData.statuses[d.name] || { isOnline: false, isVerified: false };
+                    let statusText = info.isOnline ? '• в сети' : '• не в сети';
+                    let badge = info.isVerified ? ' ☑️' : '';
+                    selectChat.innerHTML += `<option value="ЛС: ${d.name} | ${statusText}">💬 ${d.name}${badge} (${statusText})</option>`;
+                });
+
+                getMyFriends().forEach(f => {
+                    if (!renderedNames.includes(f.name)) {
+                        let info = statusData.statuses[f.name] || { isOnline: false, isVerified: false };
+                        let statusText = info.isOnline ? '• в сети' : '• не в сети';
+                        let badge = info.isVerified ? ' ☑️' : '';
+                        selectChat.innerHTML += `<option value="ЛС: ${f.name} | ${statusText}">💬 ${f.name}${badge} (${statusText})</option>`;
+                    }
+                });
+
+                const groupsRes = await fetch(`${BACKEND_URL}/api/groups`);
+                const groupsData = await groupsRes.json();
+                groupsData.groups.forEach(g => { 
+                    if (g.creator === currentUser.name || g.members.includes(currentUser.name)) {
+                        selectChat.innerHTML += `<option value="Группа: ${g.name}">👥 Группа: ${g.name}</option>`; 
+                    }
+                });
+
+                if(previousSelection && selectChat.querySelector(`option[value="${previousSelection}"]`)) { 
+                    selectChat.value = previousSelection; 
                 }
-            }, 3000);
+                uiUpdateMessages();
+            } catch(e){}
         }
 
-        // Инициализация фоновых процессов
-        startHeartbeat();
-        startAutoRefresh();
-        uiSyncUserLabel();
-        uiUpdateNotifyBadge();
-        uiUpdateChatSelection();
-    </script>
+        function uiChangeChat() { uiUpdateMessages(); }
 
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const themeToggleBtn = document.getElementById('theme-toggle');
-            if (!themeToggleBtn) return;
+        async function uiUpdateMessages() {
+            let currentUser = getCurrentUser();
+            const chat = document.getElementById('ui-chat-messages');
+            const selectChat = document.getElementById('select-active-chat');
+            let targetChat = selectChat ? selectChat.value : '';
+            if(!chat || !currentUser || !targetChat) return;
 
-            const savedTheme = localStorage.getItem('ink_theme') || 'light';
-            document.documentElement.setAttribute('data-theme', savedTheme);
-            themeToggleBtn.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+            let cleanTarget = targetChat.split(" | ")[0];
 
-            themeToggleBtn.addEventListener('click', () => {
-                const currentTheme = document.documentElement.getAttribute('data-theme');
-                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-                document.documentElement.setAttribute('data-theme', newTheme);
-                localStorage.setItem('ink_theme', newTheme);
-                themeToggleBtn.textContent = newTheme === 'dark' ? '☀️' : '🌙';
-            });
-        });
-    </script>
-</body>
-</html>
+            try {
+                await fetch(`${BACKEND_URL}/api/messages/read`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chatTarget: cleanTarget, username: currentUser.name })
+                });
+
+                const res = await fetch(`${BACKEND_URL}/api/messages`);
+                const data = await res.json();
+
+                let isGroup = cleanTarget.startsWith("Группа: ");
+                let partnerName = isGroup ? null : cleanTarget.replace("ЛС: ", "");
+
+                const filteredMessages = data.messages.filter(m => {
+                    if (isGroup) { return m.target === cleanTarget; } 
+                    else {
+                        return (m.sender === currentUser.name && m.recipient === partnerName) ||
+                               (m.sender === partnerName && m.recipient === currentUser.name);
+                    }
+                });
+
+                chat.innerHTML = '';
+                if(filteredMessages.length === 0) {
+                    chat.innerHTML = `<div style="text-align:center; color:var(--tg-text-muted); margin-top:20px; font-size:13px;">История сообщений пуста.</div>`;
+                    return;
+                }
+
+                let uniqueSenders = Array.from(new Set(filteredMessages.map(m => m.sender)));
+                const checkRes = await fetch(`${BACKEND_URL}/api/
