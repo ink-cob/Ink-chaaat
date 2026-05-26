@@ -1,189 +1,324 @@
 const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const session = require('express-session');
-const sqlite3 = require('sqlite3').verbose();
-const bcrypt = require('bcryptjs');
-const cors = require('cors'); // Добавили cors
+const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
-const server = http.createServer(app);
+const PORT = process.env.PORT || 3000;
 
-// Настройка CORS для работы с GitHub Pages
-const ALLOWED_ORIGIN = "https://ink-cob.github.io";
-
-app.use(cors({
-    origin: ALLOWED_ORIGIN,
-    credentials: true
-}));
-
-const io = new Server(server, {
-    cors: {
-        origin: ALLOWED_ORIGIN,
-        methods: ["GET", "POST"],
-        credentials: true
-    }
-});
-
-const db = new sqlite3.Database(':memory:'); 
-
+app.use(cors());
 app.use(express.json());
-app.use(session({
-    secret: 'secret-key-render-chat',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        sameSite: 'none', // Необходимо для работы сессий между разными доменами
-        secure: true      // Обязательно для HTTPS
+
+// Пути к файлам нашей импровизированной БД
+const USERS_FILE = path.join(__dirname, 'users.json');
+const CHATS_FILE = path.join(__dirname, 'chats.json');
+
+// Хелперы для чтения/записи файлов БД
+function readData(filePath) {
+    if (!fs.existsSync(filePath)) {
+        fs.writeFileSync(filePath, JSON.stringify([]));
+        return [];
     }
-}));
-
-// Инициализация БД
-db.serialize(() => {
-    db.run(`CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT, password TEXT)`);
-    db.run(`CREATE TABLE rooms (id TEXT PRIMARY KEY, name TEXT, is_dm INT)`);
-    db.run(`CREATE TABLE room_members (room_id TEXT, user_id TEXT)`);
-    db.run(`CREATE TABLE messages (id TEXT PRIMARY KEY, room_id TEXT, user_id TEXT, username TEXT, text TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)`);
-});
-
-function generateShortId(callback) {
-    const id = Math.floor(10000 + Math.random() * 90000).toString();
-    db.get("SELECT id FROM users WHERE id = ?", [id], (err, row) => {
-        if (row) return generateShortId(callback);
-        callback(id);
-    });
+    try {
+        const data = fs.readFileSync(filePath, 'utf8');
+        return JSON.parse(data || '[]');
+    } catch (e) {
+        return [];
+    }
 }
 
+function writeData(filePath, data) {
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+}
+
+// Генерация уникального 5-значного ID
+function generateUniqueId(users) {
+    let id;
+    do {
+        id = Math.floor(10000 + Math.random() * 90000).toString();
+    } while (users.some(u => u.id === id));
+    return id;
+}
+
+// -------------------------------------------------------------
+// РОУТЫ АВТОРИЗАЦИИ И ПРОФИЛЯ
+// -------------------------------------------------------------
+
+// Регистрация
 app.post('/api/register', (req, res) => {
-    const { username, password } = req.body;
-    if (!username || !password) return res.status(400).json({ error: 'Заполните поля' });
-    
-    generateShortId((userId) => {
-        const hashedPassword = bcrypt.hashSync(password, 10);
-        db.run("INSERT INTO users (id, username, password) VALUES (?, ?, ?)", [userId, username, hashedPassword], (err) => {
-            if (err) return res.status(500).json({ error: 'Ошибка регистрации' });
-            req.session.userId = userId;
-            req.session.username = username;
-            res.json({ id: userId, username });
-        });
-    });
+    const { name, password } = req.body;
+    if (!name || !password) return res.status(400).json({ error: 'Заполните все поля' });
+
+    const users = readData(USERS_FILE);
+    const newId = generateUniqueId(users);
+
+    const newUser = {
+        id: newId,
+        name,
+        password, // В реальном проекте пароли хешируют, здесь оставляем для простоты
+        createdAt: new Date().toISOString()
+    };
+
+    users.push(newUser);
+    writeData(USERS_FILE, users);
+
+    // Удаляем пароль из ответа для безопасности
+    const { password: _, ...userResponse } = newUser;
+    res.json({ user: userResponse });
 });
 
+// Вход
 app.post('/api/login', (req, res) => {
-    const { username, password } = req.body;
-    db.get("SELECT * FROM users WHERE username = ?", [username], (err, user) => {
-        if (!user || !bcrypt.compareSync(password, user.password)) {
-            return res.status(400).json({ error: 'Неверные данные' });
+    const { name, password } = req.body;
+    const users = readData(USERS_FILE);
+
+    // Ищем пользователя по имени и паролю
+    const user = users.find(u => u.name === name && u.password === password);
+    if (!user) return res.status(400).json({ error: 'Неверное имя или пароль' });
+
+    const { password: _, ...userResponse } = user;
+    res.json({ user: userResponse });
+});
+
+// Обновление профиля
+app.post('/api/profile/update', (req, res) => {
+    const { userId, name, password } = req.body;
+    const users = readData(USERS_FILE);
+
+    const userIndex = users.findIndex(u => u.id === userId);
+    if (userIndex === -1) return res.status(404).json({ error: 'Пользователь не найден' });
+
+    if (name) users[userIndex].name = name;
+    if (password) users[userIndex].password = password;
+
+    writeData(USERS_FILE, users);
+    res.json({ success: true });
+});
+
+// Удаление аккаунта
+app.post('/api/profile/delete', (req, res) => {
+    const { userId } = req.body;
+    let users = readData(USERS_FILE);
+    let chats = readData(CHATS_FILE);
+
+    // 1. Удаляем самого пользователя
+    users = users.filter(u => u.id !== userId);
+    writeData(USERS_FILE, users);
+
+    // 2. Удаляем пользователя из всех чатов
+    chats = chats.map(chat => {
+        if (chat.members.includes(userId)) {
+            chat.members = chat.members.filter(m => m !== userId);
+            // Если это был приватный чат или группа без участников — он станет недоступен
         }
-        req.session.userId = user.id;
-        req.session.username = user.username;
-        res.json({ id: user.id, username: user.username });
+        return chat;
     });
+    
+    writeData(CHATS_FILE, chats);
+    res.json({ success: true });
+});
+// -------------------------------------------------------------
+// РОУТЫ ЧАТОВ И СООБЩЕНИЙ
+// -------------------------------------------------------------
+
+// Получение списка чатов конкретного пользователя
+app.get('/api/chats', (req, res) => {
+    const { userId } = req.query;
+    if (!userId) return res.status(400).json({ error: 'Не указан userId' });
+
+    const chats = readData(CHATS_FILE);
+    const users = readData(USERS_FILE);
+
+    // Фильтруем только те чаты, где состоит пользователь
+    const userChats = chats.filter(chat => chat.members.includes(userId));
+
+    // Дополняем каждый чат актуальной информацией об именах участников (для отображения)
+    const enrichedChats = userChats.map(chat => {
+        const membersInfo = chat.members.map(mId => {
+            const u = users.find(user => user.id === mId);
+            return { id: mId, name: u ? u.name : 'Удаленный аккаунт' };
+        });
+        return { ...chat, membersInfo };
+    });
+
+    res.json(enrichedChats);
 });
 
-app.get('/api/me', (req, res) => {
-    if (!req.session.userId) return res.status(401).json({ error: 'Не авторизован' });
-    res.json({ id: req.session.userId, username: req.session.username });
-});
+// Создание приватного чата (поиск по ID)
+app.post('/api/chats/create-private', (req, res) => {
+    const { creatorId, targetId } = req.body;
+    const users = readData(USERS_FILE);
+    const chats = readData(CHATS_FILE);
 
-io.on('connection', (socket) => {
-    // Удаление (выход из) чата или ЛС
-    socket.on('delete_room', ({ roomId, userId }) => {
-        // Удаляем пользователя из участников этой комнаты
-        db.run("DELETE FROM room_members WHERE room_id = ? AND user_id = ?", [roomId, userId], () => {
-            
-            // Проверяем, остались ли еще участники в этой комнате
-            db.get("SELECT COUNT(*) as count FROM room_members WHERE room_id = ?", [roomId], (err, row) => {
-                if (!err && row.count === 0) {
-                    // Если участников не осталось, полностью стираем чат и его сообщения
-                    db.run("DELETE FROM rooms WHERE id = ?", [roomId]);
-                    db.run("DELETE FROM messages WHERE room_id = ?", [roomId]);
-                }
-                
-                // Обновляем список чатов у пользователя
-                sendUserRooms(userId);
-                socket.emit('room_deleted_success');
-            });
-        });
-    });
+    const targetUser = users.find(u => u.id === targetId);
+    if (!targetUser) return res.status(404).json({ error: 'Пользователь с таким ID не найден' });
 
-    let currentUserId = null;
-
-    socket.on('auth', (userId) => {
-        currentUserId = userId;
-        socket.join(`user_${userId}`);
-        sendUserRooms(userId);
-    });
-
-    function sendUserRooms(userId) {
-        db.all(`
-            SELECT r.id, r.name, r.is_dm, 
-            (SELECT username FROM users WHERE id = rm2.user_id AND rm2.user_id != ?) as dm_name
-            FROM rooms r
-            JOIN room_members rm ON r.id = rm.room_id
-            LEFT JOIN room_members rm2 ON r.id = rm2.room_id AND r.is_dm = 1
-            WHERE rm.user_id = ?
-        `, [userId, userId], (err, rows) => {
-            if (!err) socket.emit('rooms_list', rows);
-        });
+    // Проверяем, существует ли уже приватный чат между ними
+    const existingChat = chats.find(c => !c.isGroup && c.members.includes(creatorId) && c.members.includes(targetId));
+    if (existingChat) {
+        return res.json({ chatId: existingChat.id });
     }
 
-    socket.on('create_room', ({ name, userId }) => {
-        const roomId = Math.random().toString(36).substring(2, 9);
-        db.run("INSERT INTO rooms (id, name, is_dm) VALUES (?, ?, 0)", [roomId, name], () => {
-            db.run("INSERT INTO room_members (room_id, user_id) VALUES (?, ?)", [roomId, userId], () => {
-                sendUserRooms(userId);
-            });
-        });
-    });
+    const newChat = {
+        id: Math.random().toString(36).substring(2, 9),
+        name: 'Приватный чат',
+        isGroup: false,
+        creatorId: creatorId,
+        members: [creatorId, targetId],
+        messages: []
+    };
 
-    socket.on('create_dm', ({ targetId, userId }) => {
-        db.get("SELECT username FROM users WHERE id = ?", [targetId], (err, targetUser) => {
-            if (!targetUser || targetId === userId) return socket.emit('error_msg', 'Пользователь не найден');
-            
-            const roomId = [userId, targetId].sort().join('_');
-            db.get("SELECT id FROM rooms WHERE id = ?", [roomId], (err, exists) => {
-                if (exists) return socket.emit('dm_created', roomId);
+    chats.push(newChat);
+    writeData(CHATS_FILE, chats);
 
-                db.run("INSERT INTO rooms (id, name, is_dm) VALUES (?, ?, 1)", [roomId, 'DM'], () => {
-                    db.run("INSERT INTO room_members (room_id, user_id) VALUES (?, ?), (?, ?)", [roomId, userId, roomId, targetId], () => {
-                        sendUserRooms(userId);
-                        io.to(`user_${targetId}`).emit('refresh_rooms');
-                        socket.emit('dm_created', roomId);
-                    });
-                });
-            });
-        });
-    });
-
-    socket.on('join_room', (roomId) => {
-        socket.join(roomId);
-        db.all("SELECT * FROM messages WHERE room_id = ? ORDER BY timestamp ASC", [roomId], (err, rows) => {
-            if (!err) socket.emit('messages_list', rows);
-        });
-    });
-
-    socket.on('send_message', ({ roomId, userId, username, text }) => {
-        const msgId = Math.random().toString(36).substring(2, 9);
-        db.run("INSERT INTO messages (id, room_id, user_id, username, text) VALUES (?, ?, ?, ?, ?)", [msgId, roomId, userId, username, text], () => {
-            io.to(roomId).emit('new_message', { id: msgId, room_id: roomId, user_id: userId, username, text });
-        });
-    });
-
-    socket.on('edit_message', ({ msgId, roomId, userId, newText }) => {
-        db.run("UPDATE messages SET text = ? WHERE id = ? AND user_id = ?", [newText, msgId, userId], () => {
-            io.to(roomId).emit('message_edited', { id: msgId, text: newText });
-        });
-    });
-
-    socket.on('delete_message', ({ msgId, roomId, userId }) => {
-        db.run("DELETE FROM messages WHERE id = ? AND user_id = ?", [msgId, userId], () => {
-            io.to(roomId).emit('message_deleted', msgId);
-        });
-    });
-    
-    socket.on('refresh_rooms', () => { if(currentUserId) sendUserRooms(currentUserId); });
+    res.json({ chatId: newChat.id });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// Создание группового чата
+app.post('/api/chats/create-group', (req, res) => {
+    const { name, creatorId, members } = req.body;
+    const chats = readData(CHATS_FILE);
+    const users = readData(USERS_FILE);
+
+    // Валидация: оставляем только реально существующие ID пользователей
+    const validMembers = members.filter(mId => users.some(u => u.id === mId));
+
+    const newGroup = {
+        id: Math.random().toString(36).substring(2, 9),
+        name,
+        isGroup: true,
+        creatorId,
+        members: validMembers,
+        messages: []
+    };
+
+    chats.push(newGroup);
+    writeData(CHATS_FILE, chats);
+
+    res.json({ chatId: newGroup.id });
+});
+
+// Отправка сообщения
+app.post('/api/messages/send', (req, res) => {
+    const { chatId, authorId, authorName, text } = req.body;
+    const chats = readData(CHATS_FILE);
+
+    const chatIndex = chats.findIndex(c => c.id === chatId);
+    if (chatIndex === -1) return res.status(404).json({ error: 'Чат не найден' });
+
+    const newMessage = {
+        id: Math.random().toString(36).substring(2, 9),
+        authorId,
+        authorName,
+        text,
+        timestamp: new Date().toISOString(),
+        edited: false
+    };
+
+    chats[chatIndex].messages.push(newMessage);
+    writeData(CHATS_FILE, chats);
+
+    res.json({ success: true });
+});
+
+// Редактирование сообщения
+app.post('/api/messages/edit', (req, res) => {
+    const { chatId, messageId, authorId, text } = req.body;
+    const chats = readData(CHATS_FILE);
+
+    const chatIndex = chats.findIndex(c => c.id === chatId);
+    if (chatIndex === -1) return res.status(404).json({ error: 'Чат не найден' });
+
+    const msgIndex = chats[chatIndex].messages.findIndex(m => m.id === messageId);
+    if (msgIndex === -1) return res.status(404).json({ error: 'Сообщение не найдено' });
+
+    // Проверяем авторство перед изменением
+    if (chats[chatIndex].messages[msgIndex].authorId !== authorId) {
+        return res.status(403).json({ error: 'Можно редактировать только свои сообщения' });
+    }
+
+    chats[chatIndex].messages[msgIndex].text = text;
+    chats[chatIndex].messages[msgIndex].edited = true;
+
+    writeData(CHATS_FILE, chats);
+    res.json({ success: true });
+});
+
+// Удаление сообщения
+app.post('/api/messages/delete', (req, res) => {
+    const { chatId, messageId, authorId } = req.body;
+    const chats = readData(CHATS_FILE);
+
+    const chatIndex = chats.findIndex(c => c.id === chatId);
+    if (chatIndex === -1) return res.status(404).json({ error: 'Чат не найден' });
+
+    const msgIndex = chats[chatIndex].messages.findIndex(m => m.id === messageId);
+    if (msgIndex === -1) return res.status(404).json({ error: 'Сообщение не найдено' });
+
+    // Проверяем авторство перед удалением
+    if (chats[chatIndex].messages[msgIndex].authorId !== authorId) {
+        return res.status(403).json({ error: 'Можно удалять только свои сообщения' });
+    }
+
+    chats[chatIndex].messages.splice(msgIndex, 1);
+    writeData(CHATS_FILE, chats);
+
+    res.json({ success: true });
+});
+
+// Переименование группы (только создатель)
+app.post('/api/groups/rename', (req, res) => {
+    const { chatId, creatorId, name } = req.body;
+    const chats = readData(CHATS_FILE);
+
+    const chatIndex = chats.findIndex(c => c.id === chatId);
+    if (chatIndex === -1) return res.status(404).json({ error: 'Чат не найден' });
+    if (chats[chatIndex].creatorId !== creatorId) return res.status(403).json({ error: 'Нет прав' });
+
+    chats[chatIndex].name = name;
+    writeData(CHATS_FILE, chats);
+    res.json({ success: true });
+});
+
+// Добавление участника в группу (только создатель)
+app.post('/api/groups/add-member', (req, res) => {
+    const { chatId, creatorId, targetId } = req.body;
+    const chats = readData(CHATS_FILE);
+    const users = readData(USERS_FILE);
+
+    const chatIndex = chats.findIndex(c => c.id === chatId);
+    if (chatIndex === -1) return res.status(404).json({ error: 'Чат не найден' });
+    if (chats[chatIndex].creatorId !== creatorId) return res.status(403).json({ error: 'Нет прав' });
+
+    if (!users.some(u => u.id === targetId)) {
+        return res.status(404).json({ error: 'Пользователь с таким ID не существует' });
+    }
+
+    if (chats[chatIndex].members.includes(targetId)) {
+        return res.status(400).json({ error: 'Пользователь уже в группе' });
+    }
+
+    chats[chatIndex].members.push(targetId);
+    writeData(CHATS_FILE, chats);
+    res.json({ success: true });
+});
+
+// Исключение из группы (только создатель)
+app.post('/api/groups/kick', (req, res) => {
+    const { chatId, creatorId, targetId } = req.body;
+    const chats = readData(CHATS_FILE);
+
+    const chatIndex = chats.findIndex(c => c.id === chatId);
+    if (chatIndex === -1) return res.status(404).json({ error: 'Чат не найден' });
+    if (chats[chatIndex].creatorId !== creatorId) return res.status(403).json({ error: 'Нет прав' });
+    if (creatorId === targetId) return res.status(400).json({ error: 'Нельзя выгнать самого себя' });
+
+    chats[chatIndex].members = chats[chatIndex].members.filter(mId => mId !== targetId);
+    writeData(CHATS_FILE, chats);
+    res.json({ success: true });
+});
+
+// Запуск сервера
+app.listen(PORT, () => {
+    console.log(`Сервер мессенджера Chat Ink запущен на порту ${PORT}`);
+});

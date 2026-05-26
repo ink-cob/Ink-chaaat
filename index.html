@@ -1,262 +1,130 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="light">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Ink</title>
-    <script src="https://tailwindcss.com"></script>
-    <script src="https://socket.io"></script>
-    <style>
-        /* Монохромная глубокая палитра: угольно-черный и холодный серый */
-        body {
-            background-color: #08090b;
-            color: #e4e4e7;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-            overflow: hidden;
-            -webkit-font-smoothing: antialiased;
-        }
-
-        /* Полный отказ от классического вида полей ввода */
-        .txt-input {
-            background: transparent;
-            border-bottom: 1px solid #27272a;
-            color: #ffffff;
-            transition: border-color 0.2s ease;
-        }
-        .txt-input:focus {
-            border-bottom-color: #ffffff;
-        }
-
-        /* Интерактивный текст вместо кнопок */
-        .text-action {
-            cursor: pointer;
-            transition: opacity 0.15s ease, letter-spacing 0.2s ease;
-        }
-        .text-action:hover {
-            opacity: 0.7;
-            letter-spacing: 1px;
-        }
-
-        /* Тонкое выделение активного чата без заливки */
-        .active-link {
-            color: #ffffff !important;
-            font-weight: 700;
-            border-left: 1px solid #ffffff !important;
-            padding-left: 12px !important;
-        }
-
-        @media (max-width: 768px) {
-            .mob-hide { display: none !important; }
-            .mob-full { width: 100% !important; position: fixed; inset: 0; z-index: 30; background-color: #08090b; }
-        }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Ink</title>
+    <link rel="stylesheet" href="style.css">
 </head>
-<body class="h-screen w-screen flex flex-col relative overflow-hidden select-none">
+<body>
 
-    <!-- СТРАНИЦА ВХОДА (Исключительно текстовая) -->
-    <div id="auth-screen" class="m-auto w-full max-w-[280px] p-4 z-40">
-        <div class="mb-10">
-            <h2 class="text-lg font-bold tracking-widest text-white uppercase">Ink chat</h2>
-            <p class="text-[10px] text-zinc-500 mt-1 uppercase tracking-wider">системный вход</p>
-        </div>
-        <div class="space-y-6">
-            <input id="auth-username" type="text" placeholder="ЛОГИН" class="w-full txt-input py-1 text-xs outline-none tracking-widest placeholder-zinc-700">
-            <input id="auth-password" type="password" placeholder="ПАРОЛЬ" class="w-full txt-input py-1 text-xs outline-none tracking-widest placeholder-zinc-700">
-            <div class="pt-4 space-y-3">
-                <div onclick="auth('login')" class="text-action text-xs font-bold tracking-widest text-white uppercase">[ ВОЙТИ ]</div>
-                <div onclick="auth('register')" class="text-action text-[10px] tracking-widest text-zinc-500 uppercase">[ создать аккаунт ]</div>
+    <!-- ОКНО АВТОРИЗАЦИИ -->
+    <div id="auth-screen" class="screen">
+        <div class="auth-card">
+            <h2>Chat Ink</h2>
+            <div class="tabs">
+                <button id="tab-login" class="active" onclick="switchAuthTab('login')">Вход</button>
+                <button id="tab-register" onclick="switchAuthTab('register')">Регистрация</button>
             </div>
+            <form id="auth-form" onsubmit="handleAuth(event)">
+                <input type="text" id="auth-name" placeholder="Имя пользователя" required>
+                <input type="password" id="auth-pass" placeholder="Пароль" required>
+                <button type="submit" id="auth-submit-btn">Войти</button>
+            </form>
         </div>
     </div>
-    <!-- ОСНОВНОЙ ИНТЕРФЕЙС -->
-    <div id="chat-screen" class="hidden flex h-full w-full overflow-hidden p-6 gap-6">
+
+    <!-- ОСНОВНОЙ ИНТЕРФЕЙС МЕССЕНДЖЕРА -->
+    <div id="app-screen" class="screen hidden">
         
-        <!-- ЛЕВАЯ СТОРОНА: Списки и Меню действий -->
-        <div class="w-64 h-full flex flex-col shrink-0 border-r border-zinc-900 pr-6 mob-full z-20">
-            <!-- Информация о сессии -->
-            <div class="pb-6 border-b border-zinc-900 shrink-0">
-                <div class="text-xs font-bold text-white tracking-wider uppercase truncate" id="my-name">...</div>
-                <div class="text-[10px] text-zinc-500 font-mono mt-1 tracking-widest">ID: <span id="my-id" class="text-zinc-400 font-bold">00000</span></div>
+        <!-- Левая панель -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="profile-avatar" onclick="toggleModal('profile-modal')">UI</div>
+                <input type="text" id="search-contact" placeholder="Поиск по ID..." onkeypress="searchUser(event)">
+                <button class="icon-btn" onclick="openCreateGroup()">➕</button>
+            </div>
+            <div class="chat-list" id="chat-list-container">
+                <!-- Сюда динамически загружаются чаты -->
+            </div>
+        </aside>
+
+        <!-- Окно чата -->
+        <main class="chat-window">
+            <div id="chat-empty-state" class="empty-state">
+                <p>Выберите чат, чтобы начать общение</p>
             </div>
             
-            <!-- Инструменты управления (Прямой вызов prompt по текстовым ссылкам) -->
-            <div class="py-4 border-b border-zinc-900 flex flex-col gap-2 shrink-0 text-[10px] tracking-widest text-zinc-400 uppercase">
-                <div onclick="openPrompt('dm')" class="text-action">+ Найти друга (ID)</div>
-                <div onclick="openPrompt('group')" class="text-action">+ Создать группу</div>
-            </div>
-
-            <!-- Текстовые фильтры категорий -->
-            <div class="py-3 flex gap-4 text-[10px] tracking-widest text-zinc-500 border-b border-zinc-900 shrink-0 uppercase font-bold">
-                <div onclick="filterRooms('all')" id="tab-all" class="text-action text-white">Все</div>
-                <div onclick="filterRooms('dm')" id="tab-dm" class="text-action">Личные</div>
-                <div onclick="filterRooms('group')" id="tab-group" class="text-action">Группы</div>
-            </div>
-
-            <!-- Список доступных чатов -->
-            <div class="flex-1 overflow-y-auto py-4 space-y-3" id="rooms-list"></div>
-            
-            <!-- Терминация сессии -->
-            <div class="pt-4 border-t border-zinc-900 shrink-0">
-                <div onclick="location.reload()" class="text-action text-[10px] tracking-widest text-zinc-600 hover:text-rose-500 uppercase">[ ВЫХОД ]</div>
-            </div>
-        </div>
-
-        <!-- ПРАВАЯ СТОРОНА: Терминал сообщений -->
-        <div id="chat-view-screen" class="flex-1 h-full flex flex-col mob-hide mob-full z-30">
-            <!-- Шапка чата -->
-            <div class="pb-4 border-b border-zinc-900 flex items-center justify-between shrink-0">
-                <div class="flex items-center gap-4 truncate">
-                    <div onclick="closeChatPage()" class="md:hidden text-action text-xs text-zinc-500 tracking-widest">[ НАЗАД ]</div>
-                    <div id="chat-header" class="text-xs font-bold text-zinc-400 tracking-widest uppercase truncate">ЧАТ НЕ ВЫБРАН</div>
+            <div id="chat-active-state" class="chat-active hidden">
+                <header class="chat-header">
+                    <div class="chat-info">
+                        <h3 id="current-chat-title">Название чата</h3>
+                        <span id="current-chat-status">участники</span>
+                    </div>
+                    <button id="group-manage-btn" class="icon-btn hidden" onclick="openGroupManagement()">⚙️</button>
+                </header>
+                
+                <div class="message-history" id="message-container">
+                    <!-- Сообщения -->
                 </div>
+                
+                <footer class="chat-footer">
+                    <form id="message-form" onsubmit="sendMessage(event)">
+                        <input type="hidden" id="edit-message-id" value="">
+                        <input type="text" id="message-input" placeholder="Напишите сообщение..." required autocomplete="off">
+                        <button type="submit" id="send-btn">Отправить</button>
+                    </form>
+                </footer>
             </div>
-            
-            <!-- Лента переписки -->
-            <div id="messages-container" class="flex-1 py-6 overflow-y-auto space-y-4 flex flex-col"></div>
-            
-            <!-- Текстовое поле ввода -->
-            <div id="input-area" class="hidden pt-4 border-t border-zinc-900 flex gap-4 items-end shrink-0">
-                <input id="message-input" type="text" placeholder="СООБЩЕНИЕ..." class="flex-1 bg-transparent border-b border-zinc-800 focus:border-white py-1 text-xs outline-none transition-colors tracking-wider placeholder-zinc-700 text-white" onkeypress="if(event.key==='Enter') sendMessage()">
-                <div onclick="sendMessage()" class="text-action text-xs font-bold tracking-widest text-white uppercase shrink-0 py-1">[ ОТПРАВИТЬ ]</div>
+        </main>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО: ПРОФИЛЬ -->
+    <div id="profile-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Ваш профиль</h3>
+            <div class="profile-info">
+                <p><strong>Ваш ID:</strong> <span id="prof-id">00000</span></p>
+                <p><strong>Дата регистрации:</strong> <span id="prof-date">-</span></p>
+                <label>Изменить имя: <input type="text" id="edit-name"></label>
+                <label>Изменить пароль: <input type="password" id="edit-pass"></label>
+            </div>
+            <div class="theme-toggle">
+                <span>Темная тема</span>
+                <input type="checkbox" id="theme-checkbox" onchange="toggleTheme()">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-save" onclick="updateProfile()">Сохранить</button>
+                <button class="btn-logout" onclick="logout()">Выйти</button>
+                <button class="btn-delete-acc" onclick="deleteAccount()">Удалить аккаунт</button>
+                <button class="btn-close" onclick="toggleModal('profile-modal')">Закрыть</button>
             </div>
         </div>
     </div>
-    <script>
-        const SERVER_URL = 'https://onrender.com'; // СЮДА ВАШ URL С RENDER
 
-        const socket = io(SERVER_URL, { withCredentials: true });
-        let me = null, activeRoomId = null, allRooms = [], currentFilter = 'all';
+    <!-- МОДАЛЬНОЕ ОКНО: СОЗДАНИЕ ГРУППЫ -->
+    <div id="group-create-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Создать группу</h3>
+            <input type="text" id="new-group-name" placeholder="Название группы" required>
+            <p>Добавьте участников по ID (через запятую):</p>
+            <input type="text" id="new-group-members" placeholder="Пример: 12345, 67890">
+            <div class="modal-actions">
+                <button class="btn-save" onclick="submitCreateGroup()">Создать</button>
+                <button class="btn-close" onclick="toggleModal('group-create-modal')">Отмена</button>
+            </div>
+        </div>
+    </div>
 
-        function closeChatPage() { document.getElementById('chat-view-screen').classList.add('mob-hide'); activeRoomId = null; }
+    <!-- МОДАЛЬНОЕ ОКНО: УПРАВЛЕНИЕ ГРУППОЙ (ДЛЯ СОЗДАТЕЛЯ) -->
+    <div id="group-manage-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Управление чатом</h3>
+            <label>Переименовать: <input type="text" id="manage-group-name"></label>
+            <button onclick="updateGroupName()">Обновить название</button>
+            <hr>
+            <label>Добавить участника (ID): <input type="text" id="add-member-id"></label>
+            <button onclick="addGroupMember()">Добавить</button>
+            <hr>
+            <h4>Участники:</h4>
+            <div id="group-members-list"></div>
+            <div class="modal-actions">
+                <button class="btn-close" onclick="toggleModal('group-manage-modal')">Закрыть</button>
+            </div>
+        </div>
+    </div>
 
-        function openPrompt(type) {
-            if (type === 'dm') {
-                const id = prompt("УКАЖИТЕ 5-ЗНАЧНЫЙ ID:");
-                if (id && id.trim()) socket.emit('create_dm', { targetId: id.trim(), userId: me.id });
-            } else {
-                const name = prompt("УКАЖИТЕ НАЗВАНИЕ ГРУППЫ:");
-                if (name && name.trim()) socket.emit('create_room', { name: name.trim(), userId: me.id });
-            }
-        }
-
-        async function auth(type) {
-            const username = document.getElementById('auth-username').value;
-            const password = document.getElementById('auth-password').value;
-            try {
-                const res = await fetch(`${SERVER_URL}/api/${type}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
-                });
-                const data = await res.json();
-                if (data.error) return alert(data.error);
-                me = data;
-                document.getElementById('auth-screen').classList.add('hidden');
-                document.getElementById('chat-screen').classList.remove('hidden');
-                
-                document.getElementById('my-name').innerText = me.username;
-                document.getElementById('my-id').innerText = me.id;
-                socket.emit('auth', me.id);
-            } catch(e) { alert("Подключение к сети..."); }
-        }
-
-        function selectRoom(roomId, title) {
-            activeRoomId = roomId;
-            document.getElementById('chat-header').innerText = title;
-            document.getElementById('input-area').classList.remove('hidden');
-            document.getElementById('chat-view-screen').classList.remove('mob-hide');
-            
-            document.querySelectorAll('.chat-item').forEach(e => e.classList.remove('active-link'));
-            document.getElementById(`room-${roomId}`)?.classList.add('active-link');
-            socket.emit('join_room', roomId);
-        }
-
-        function sendMessage() {
-            const el = document.getElementById('message-input');
-            if (!el.value.trim() || !activeRoomId) return;
-            socket.emit('send_message', { roomId: activeRoomId, userId: me.id, username: me.username, text: el.value.trim() });
-            el.value = '';
-        }
-
-        function editMessage(msgId, oldText) {
-            const newText = prompt("РЕДАКТИРОВАНИЕ:", oldText);
-            if (newText && newText.trim() !== oldText) socket.emit('edit_message', { msgId, roomId: activeRoomId, userId: me.id, newText: newText.trim() });
-        }
-
-        function deleteMessage(msgId) {
-            if (confirm("УДАЛИТЬ?")) socket.emit('delete_message', { msgId, roomId: activeRoomId, userId: me.id });
-        }
-
-        function leaveRoom(e, roomId, title) {
-            e.stopPropagation();
-            if (confirm(`УДАЛИТЬ ЧАТ ${title}?`)) {
-                socket.emit('delete_room', { roomId, userId: me.id });
-                if (activeRoomId === roomId) closeChatPage();
-            }
-        }
-
-        function filterRooms(filterType) {
-            currentFilter = filterType;
-            ['all', 'dm', 'group'].forEach(t => {
-                const btn = document.getElementById(`tab-${t}`);
-                if(t === filterType) btn.className = "text-action text-white";
-                else btn.className = "text-action text-zinc-500";
-            });
-            renderRoomsList();
-        }
-
-        function renderRoomsList() {
-            const list = document.getElementById('rooms-list');
-            list.innerHTML = '';
-            const filtered = allRooms.filter(r => {
-                if (currentFilter === 'dm') return r.is_dm === 1;
-                if (currentFilter === 'group') return r.is_dm === 0;
-                return true;
-            });
-
-            filtered.forEach(r => {
-                const title = r.is_dm ? r.dm_name : r.name;
-                const typeLabel = r.is_dm ? 'dm' : 'group';
-                const active = r.id === activeRoomId ? 'active-link' : '';
-
-                list.innerHTML += `
-                    <div id="room-${r.id}" onclick="selectRoom('${r.id}', '${title.toUpperCase()}')" class="chat-item flex items-center justify-between text-xs cursor-pointer text-zinc-400 hover:text-zinc-200 transition-all ${active} group pl-2 border-l border-zinc-800">
-                        <div class="truncate flex-1">
-                            <span class="text-[9px] text-zinc-600 font-bold mr-1 uppercase">[${typeLabel}]</span>
-                            <span class="tracking-wide">${title}</span>
-                        </div>
-                        <span onclick="leaveRoom(event, '${r.id}', '${title.toUpperCase()}')" class="text-zinc-600 hover:text-rose-500 ml-2 font-normal text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">[X]</span>
-                    </div>`;
-            });
-        }
-
-        socket.on('rooms_list', (rooms) => { allRooms = rooms; renderRoomsList(); });
-        socket.on('messages_list', (messages) => { document.getElementById('messages-container').innerHTML = ''; messages.forEach(appendMessage); });
-        socket.on('new_message', (msg) => { if (msg.room_id === activeRoomId) appendMessage(msg); });
-        socket.on('message_edited', ({ id, text }) => { const el = document.getElementById(`text-${id}`); if (el) el.innerText = text; });
-        socket.on('message_deleted', (id) => document.getElementById(`msg-${id}`)?.remove());
-        socket.on('refresh_rooms', () => socket.emit('refresh_rooms'));
-        socket.on('error_msg', alert);
-
-        function appendMessage(msg) {
-            const container = document.getElementById('messages-container');
-            const isMy = msg.user_id === me.id;
-            const actions = isMy ? `
-                <span class="opacity-0 group-hover:opacity-100 inline-flex gap-2 ml-3 text-[9px] text-zinc-500 font-normal lowercase">
-                    <span onclick="editMessage('${msg.id}', '${msg.text}')" class="cursor-pointer hover:text-white">изм</span>
-                    <span onclick="deleteMessage('${msg.id}')" class="cursor-pointer hover:text-rose-400">удал</span>
-                </span>` : '';
-
-            container.innerHTML += `
-                <div id="msg-${msg.id}" class="flex flex-col group max-w-[85%] ${isMy ? 'self-end items-end' : 'self-start items-start'}">
-                    <div class="text-[9px] text-zinc-600 mb-1 flex items-center font-bold tracking-wider uppercase">${msg.username} ${actions}</div>
-                    <div class="text-xs text-zinc-300 leading-relaxed font-mono">
-                        <span id="text-${msg.id}" class="break-words whitespace-pre-wrap">${msg.text}</span>
-                    </div>
-                </div>`;
-            container.scrollTop = container.scrollHeight;
-        }
-    </script>
+    <!-- Подключение главного скрипта логики -->
+    <script src="script.js"></script>
 </body>
 </html>
-
