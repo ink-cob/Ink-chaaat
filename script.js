@@ -230,7 +230,7 @@ function selectChat(chatId) {
     renderActiveChat();
 }
 
-// Отображение сообщений выбранного чата
+// ПОЛНОСТЬЮ ИСПРАВЛЕННАЯ ФУНКЦИЯ ДЛЯ SCRIPT.JS
 function renderActiveChat() {
     const chat = chatsData.find(c => c.id === currentChatId);
     if (!chat) return;
@@ -263,24 +263,37 @@ function renderActiveChat() {
         const msgDiv = document.createElement('div');
         msgDiv.className = `message ${isOwn ? 'own' : 'other'}`;
 
-        let actionsHtml = '';
-        if (isOwn) {
-            actionsHtml = `
-                <span class="msg-actions">
-                    <span onclick="startEditMessage('${msg.id}', '${msg.text.replace(/'/g, "\\'")}')">✏️</span>
-                    <span onclick="deleteMessage('${msg.id}')">🗑️</span>
-                </span>
-            `;
-        }
-
         msgDiv.innerHTML = `
             ${chat.isGroup && !isOwn ? `<div class="msg-author">${msg.authorName}</div>` : ''}
-            <div class="msg-text">${msg.text}</div>
+            <div class="msg-text"></div>
             <div class="msg-meta">
                 <span>${msg.edited ? 'изм. ' : ''}${new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                ${actionsHtml}
+                <span class="msg-actions-container"></span>
             </div>
         `;
+
+        // Безопасно вставляем текст сообщения, защищая от XSS и синтаксических ошибок кавычек
+        msgDiv.querySelector('.msg-text').innerText = msg.text;
+
+        // Если сообщение наше — добавляем кнопки управления через DOM, чтобы избежать ошибок с кавычками
+        if (isOwn) {
+            const actionsContainer = msgDiv.querySelector('.msg-actions-container');
+            actionsContainer.className = 'msg-actions';
+            
+            const editBtn = document.createElement('span');
+            editBtn.innerText = '✏️ ';
+            editBtn.style.cursor = 'pointer';
+            editBtn.onclick = () => startEditMessage(msg.id, msg.text);
+            
+            const deleteBtn = document.createElement('span');
+            deleteBtn.innerText = '🗑️';
+            deleteBtn.style.cursor = 'pointer';
+            deleteBtn.onclick = () => deleteMessage(msg.id);
+            
+            actionsContainer.appendChild(editBtn);
+            actionsContainer.appendChild(deleteBtn);
+        }
+
         container.appendChild(msgDiv);
     });
 
