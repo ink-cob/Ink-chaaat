@@ -1,201 +1,152 @@
-const WebSocket = require('ws');
-const http = require('http');
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-const PORT = process.env.PORT || 10000;
-const server = http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Chat Ink Server is running\n');
+// Жесткая настройка CORS для работы с GitHub Pages
+app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', 'https://github.io');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
+    next();
 });
 
-const wss = new WebSocket.Server({ server });
+app.use(express.json());
 
-// Внутриигровая база данных (в продакшене лучше использовать MongoDB/PostgreSQL)
-let users = []; // { id, name, password, createdAt }
-let chats = []; // { id, name, isGroup, creator, members: [], messages: [] }
+// База данных в оперативной памяти
+let users = [];
+let messages = [];
 
-// Хранилище активных соединений: userId -> ws
-const clients = new Map();
-
+// Генерация 5-значного ID
 function generateUniqueId() {
     let id;
     do {
         id = Math.floor(10000 + Math.random() * 90000).toString();
-    } while (users.some(u => u.id === id));
+    } while (users.some(u => u.userId === id));
     return id;
 }
 
-wss.on('connection', (ws) => {
-    let currentUserId = null;
+// Регистрация
+app.post('/api/register', (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) {
+        return res.status(400).json({ error: 'Имя и пароль обязательны' });
+    }
 
-    ws.on('message', (message) => {
-        try {
-            const data = JSON.parse(message);
-            
-            switch (data.type) {
-                case 'REGISTER': {
-                    const newId = generateUniqueId();
-                    const newUser = {
-                        id: newId,
-                        name: data.name,
-                        password: data.password,
-                        createdAt: new Date().toISOString()
-                    };
-                    users.push(newUser);
-                    ws.send(JSON.stringify({ type: 'REGISTER_SUCCESS', user: newUser }));
-                    break;
-                }
+    const userId = generateUniqueId();
+    const newUser = {
+        userId,
+        username,
+        password,
+        createdAt: new Date().toISOString()
+    };
 
-                case 'LOGIN': {
-                    const user = users.find(u => u.id === data.id && u.password === data.password);
-                    if (user) {
-                        currentUserId = user.id;
-                        clients.set(currentUserId, ws);
-                        ws.send(JSON.stringify({ type: 'LOGIN_SUCCESS', user }));
-                        sendUserChats(currentUserId);
-                    } else {
-                        ws.send(JSON.stringify({ type: 'ERROR', message: 'Неверный ID или пароль' }));
-                    }
-                    break;
-                }
-
-                case 'DELETE_ACCOUNT': {
-                    users = users.filter(u => u.id !== data.id);
-                    chats = chats.filter(c => {
-                        c.members = c.members.filter(m => m !== data.id);
-                        return c.members.length > 0;
-                    });
-                    clients.delete(data.id);
-                    ws.send(JSON.stringify({ type: 'ACCOUNT_DELETED' }));
-                    broadcastChatUpdate();
-                    break;
-                }
-
-                case 'UPDATE_PROFILE': {
-                    const user = users.find(u => u.id === data.id);
-                    if (user) {
-                        user.name = data.name;
-                        user.password = data.password;
-                        ws.send(JSON.stringify({ type: 'PROFILE_UPDATED', user }));
-                    }
-                    break;
-                }
-
-                case 'SEARCH_USER': {
-                    const user = users.find(u => u.id === data.searchId);
-                    if (user) {
-                        ws.send(JSON.stringify({ type: 'SEARCH_RESULT', user: { id: user.id, name: user.name } }));
-                    } else {
-                        ws.send(JSON.stringify({ type: 'ERROR', message: 'Пользователь не найден' }));
-                    }
-                    break;
-                }
-
-                case 'CREATE_CHAT': {
-                    const chatId = '_' + Math.random().toString(36).substr(2, 9);
-                    const newChat = {
-                        id: chatId,
-                        name: data.name || 'Приватный чат',
-                        isGroup: data.isGroup,
-                        creator: data.creator,
-                        members: data.members,
-                        messages: []
-                    };
-                    chats.push(newChat);
-                    data.members.forEach(memberId => sendUserChats(memberId));
-                    break;
-                }
-
-                case 'SEND_MESSAGE': {
-                    const chat = chats.find(c => c.id === data.chatId);
-                    if (chat && chat.members.includes(data.senderId)) {
-                        const msgId = '_' + Math.random().toString(36).substr(2, 9);
-                        const msg = {
-                            id: msgId,
-                            senderId: data.senderId,
-                            senderName: data.senderName,
-                            text: data.text,
-                            timestamp: new Date().toISOString(),
-                            edited: false
-                        };
-                        chat.messages.push(msg);
-                        chat.members.forEach(memberId => {
-                            const clientWs = clients.get(memberId);
-                            if (clientWs && clientWs.readyState === WebSocket.OPEN) {
-                                clientWs.send(JSON.stringify({ type: 'NEW_MESSAGE', chatId: chat.id, message: msg }));
-                            }
-                        });
-                    }
-                    break;
-                }
-
-                case 'EDIT_MESSAGE': {
-                    const chat = chats.find(c => c.id === data.chatId);
-                    if (chat) {
-                        const msg = chat.messages.find(m => m.id === data.messageId && m.senderId === data.senderId);
-                        if (msg) {
-                            msg.text = data.newText;
-                            msg.edited = true;
-                            chat.members.forEach(memberId => {
-                                const clientWs = clients.get(memberId);
-                                if (clientWs && clientWs.readyState === WebSocket.OPEN) {
-                                    clientWs.send(JSON.stringify({ type: 'MESSAGE_EDITED', chatId: chat.id, messageId: msg.id, text: msg.text }));
-                                }
-                            });
-                        }
-                    }
-                    break;
-                }
-
-                case 'DELETE_MESSAGE': {
-                    const chat = chats.find(c => c.id === data.chatId);
-                    if (chat) {
-                        chat.messages = chat.messages.filter(m => !(m.id === data.messageId && m.senderId === data.senderId));
-                        chat.members.forEach(memberId => {
-                            const clientWs = clients.get(memberId);
-                            if (clientWs && clientWs.readyState === WebSocket.OPEN) {
-                                clientWs.send(JSON.stringify({ type: 'MESSAGE_DELETED', chatId: chat.id, messageId: data.messageId }));
-                            }
-                        });
-                    }
-                    break;
-                }
-
-                case 'MANAGE_GROUP': {
-                    const chat = chats.find(c => c.id === data.chatId && c.creator === data.userId);
-                    if (chat) {
-                        if (data.action === 'rename') chat.name = data.newName;
-                        if (data.action === 'kick') chat.members = chat.members.filter(m => m !== data.targetId);
-                        if (data.action === 'add' && !chat.members.includes(data.targetId)) chat.members.push(data.targetId);
-                        if (data.action === 'delete') {
-                            chats = chats.filter(c => c.id !== data.chatId);
-                            chat.members.forEach(memberId => sendUserChats(memberId));
-                            return;
-                        }
-                        chat.members.forEach(memberId => sendUserChats(memberId));
-                    }
-                    break;
-                }
-            }
-        } catch (err) {
-            console.error(err);
-        }
-    });
-
-    ws.on('close', () => {
-        if (currentUserId) clients.delete(currentUserId);
-    });
+    users.push(newUser);
+    const { password: _, ...userWithoutPassword } = newUser;
+    res.status(201).json({ user: userWithoutPassword });
 });
 
-function sendUserChats(userId) {
-    const userChats = chats.filter(c => c.members.includes(userId));
-    const clientWs = clients.get(userId);
-    if (clientWs && clientWs.readyState === WebSocket.OPEN) {
-        clientWs.send(JSON.stringify({ type: 'CHATS_LIST', chats: userChats }));
+// Вход
+app.post('/api/login', (req, res) => {
+    const { username, password } = req.body;
+    const user = users.find(u => u.username === username && u.password === password);
+    
+    if (!user) {
+        return res.status(401).json({ error: 'Неверное имя пользователя или пароль' });
     }
-}
 
-function broadcastChatUpdate() {
-    clients.forEach((ws, userId) => sendUserChats(userId));
-}
+    const { password: _, ...userWithoutPassword } = user;
+    res.json({ user: userWithoutPassword });
+});
 
-server.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+// Поиск пользователя по ID
+app.get('/api/user/:id', (req, res) => {
+    const user = users.find(u => u.userId === req.params.id);
+    if (!user) {
+        return res.status(404).json({ error: 'Пользователь не найден' });
+    }
+    res.json({ userId: user.userId, username: user.username });
+});
+
+// Получение сообщений
+app.get('/api/messages', (req, res) => {
+    const { user1, user2 } = req.query;
+    if (!user1 || !user2) {
+        return res.status(400).json({ error: 'Не указаны участники диалога' });
+    }
+
+    const chatHistory = messages.filter(m => 
+        (m.senderId === user1 && m.receiverId === user2) || 
+        (m.senderId === user2 && m.receiverId === user1)
+    );
+    res.json(chatHistory);
+});
+
+// Отправка сообщения
+app.post('/api/messages', (req, res) => {
+    const { senderId, receiverId, text } = req.body;
+    if (!senderId || !receiverId || !text) {
+        return res.status(400).json({ error: 'Не все поля заполнены' });
+    }
+
+    const newMessage = {
+        id: Math.random().toString(36).substr(2, 9),
+        senderId,
+        receiverId,
+        text,
+        timestamp: new Date().toISOString(),
+        edited: false
+    };
+
+    messages.push(newMessage);
+    res.status(201).json(newMessage);
+});
+
+// Редактирование сообщения
+app.put('/api/messages/:id', (req, res) => {
+    const { text } = req.body;
+    const msg = messages.find(m => m.id === req.params.id);
+    
+    if (!msg) return res.status(404).json({ error: 'Сообщение не найдено' });
+    
+    msg.text = text;
+    msg.edited = true;
+    res.json(msg);
+});
+
+// Удаление сообщения
+app.delete('/api/messages/:id', (req, res) => {
+    messages = messages.filter(m => m.id !== req.params.id);
+    res.json({ success: true });
+});
+
+// Обновление профиля
+app.put('/api/user/:id', (req, res) => {
+    const { username, password } = req.body;
+    const user = users.find(u => u.userId === req.params.id);
+
+    if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+
+    if (username) user.username = username;
+    if (password) user.password = password;
+
+    const { password: _, ...userWithoutPassword } = user;
+    res.json({ user: userWithoutPassword });
+});
+
+// Удаление аккаунта
+app.delete('/api/user/:id', (req, res) => {
+    const userId = req.params.id;
+    users = users.filter(u => u.userId !== userId);
+    messages = messages.filter(m => m.senderId !== userId && m.receiverId !== userId);
+    res.json({ success: true });
+});
+
+// Запуск
+app.listen(PORT, () => {
+    console.log(`Сервер мессенджера Chat Ink успешно запущен на порту ${PORT}`);
+});
