@@ -8,124 +8,514 @@
 </head>
 <body>
 
-    <!-- ОКНО АВТОРИЗАЦИИ -->
-    <div id="auth-screen" class="screen">
+    <!-- ОКНО АВТОРИЗАЦИИ / РЕГИСТРАЦИИ -->
+    <div id="auth-container" class="screen active">
         <div class="auth-card">
-            <h2>Chat Ink</h2>
-            <div class="tabs">
-                <button id="tab-login" class="active" onclick="switchAuthTab('login')">Вход</button>
-                <button id="tab-register" onclick="switchAuthTab('register')">Регистрация</button>
+            <h1 class="logo-text">Chat Ink</h1>
+            <div id="auth-forms">
+                <!-- Форма входа -->
+                <div id="login-form">
+                    <h2>Вход</h2>
+                    <input type="text" id="login-id" placeholder="Ваш 5-значный ID" maxlength="5">
+                    <input type="password" id="login-password" placeholder="Пароль">
+                    <button onclick="login()">Войти</button>
+                    <p class="toggle-text">Нет аккаунта? <span onclick="toggleAuthForm(false)">Зарегистрироваться</span></p>
+                </div>
+                <!-- Форма регистрации -->
+                <div id="register-form" class="hidden">
+                    <h2>Регистрация</h2>
+                    <input type="text" id="reg-name" placeholder="Имя пользователя">
+                    <input type="password" id="reg-password" placeholder="Пароль">
+                    <button onclick="register()">Создать аккаунт</button>
+                    <p class="toggle-text">Уже есть аккаунт? <span onclick="toggleAuthForm(true)">Войти</span></p>
+                </div>
             </div>
-            <form id="auth-form" onsubmit="handleAuth(event)">
-                <input type="text" id="auth-name" placeholder="Имя пользователя" required>
-                <input type="password" id="auth-pass" placeholder="Пароль" required>
-                <button type="submit" id="auth-submit-btn">Войти</button>
-            </form>
         </div>
     </div>
 
     <!-- ОСНОВНОЙ ИНТЕРФЕЙС МЕССЕНДЖЕРА -->
-    <div id="app-screen" class="screen hidden">
-        
-        <!-- Левая панель -->
+    <div id="app-container" class="screen">
+        <!-- Левая панель: Список чатов -->
         <aside class="sidebar">
             <div class="sidebar-header">
-                <div class="profile-avatar" onclick="toggleModal('profile-modal')">UI</div>
-                <input type="text" id="search-contact" placeholder="Поиск по ID..." onkeypress="searchUser(event)">
-                <button class="icon-btn" onclick="openCreateGroup()">➕</button>
+                <div class="user-summary" onclick="openModal('profile-modal')">
+                    <div class="avatar" id="my-avatar">U</div>
+                    <div class="user-meta">
+                        <span id="my-name" class="bold">Имя</span>
+                        <span id="my-id-display" class="subtext">ID: 00000</span>
+                    </div>
+                </div>
+                <button id="theme-toggle" onclick="toggleTheme()">🌓</button>
             </div>
-            <div class="chat-list" id="chat-list-container">
-                <!-- Сюда динамически загружаются чаты -->
+
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="Поиск по ID пользователя...">
+                <button onclick="searchUser()">🔍</button>
+            </div>
+
+            <div class="action-buttons">
+                <button onclick="openModal('group-modal')" class="btn-sm">👥 Создать группу</button>
+            </div>
+
+            <div class="chats-list" id="chats-list">
+                <!-- Динамические чаты -->
             </div>
         </aside>
 
-        <!-- Окно чата -->
-        <main class="chat-window">
-            <div id="chat-empty-state" class="empty-state">
-                <p>Выберите чат, чтобы начать общение</p>
+        <!-- Правая панель: Окно открытого чата -->
+        <main class="chat-area">
+            <div id="chat-blank" class="chat-blank">
+                <p>Выберите чат или найдите пользователя по ID, чтобы начать общение</p>
             </div>
-            
-            <div id="chat-active-state" class="chat-active hidden">
-                <header class="chat-header">
+
+            <div id="chat-active" class="chat-active hidden">
+                <div class="chat-header">
                     <div class="chat-info">
-                        <h3 id="current-chat-title">Название чата</h3>
-                        <span id="current-chat-status">участники</span>
+                        <span id="active-chat-name" class="bold">Название чата</span>
+                        <span id="active-chat-status" class="subtext">Участники</span>
                     </div>
-                    <button id="group-manage-btn" class="icon-btn hidden" onclick="openGroupManagement()">⚙️</button>
-                </header>
-                
-                <div class="message-history" id="message-container">
+                    <button id="manage-group-btn" class="hidden" onclick="openGroupManagement()">⚙️ Настройки</button>
+                </div>
+
+                <div class="messages-container" id="messages-container">
                     <!-- Сообщения -->
                 </div>
-                
-                <footer class="chat-footer">
-                    <form id="message-form" onsubmit="sendMessage(event)">
-                        <input type="hidden" id="edit-message-id" value="">
-                        <input type="text" id="message-input" placeholder="Напишите сообщение..." required autocomplete="off">
-                        <button type="submit" id="send-btn">Отправить</button>
-                    </form>
-                </footer>
+
+                <div class="input-panel">
+                    <input type="text" id="message-input" placeholder="Напишите сообщение..." onkeypress="handleKeyPress(event)">
+                    <button id="send-btn" onclick="sendMessage()">Отправить</button>
+                </div>
             </div>
         </main>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО: ПРОФИЛЬ -->
-    <div id="profile-modal" class="modal hidden">
+    <!-- МОДАЛЬНОЕ ОКНО: ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ -->
+    <div id="profile-modal" class="modal">
         <div class="modal-content">
-            <h3>Ваш профиль</h3>
-            <div class="profile-info">
-                <p><strong>Ваш ID:</strong> <span id="prof-id">00000</span></p>
-                <p><strong>Дата регистрации:</strong> <span id="prof-date">-</span></p>
-                <label>Изменить имя: <input type="text" id="edit-name"></label>
-                <label>Изменить пароль: <input type="password" id="edit-pass"></label>
-            </div>
-            <div class="theme-toggle">
-                <span>Темная тема</span>
-                <input type="checkbox" id="theme-checkbox" onchange="toggleTheme()">
-            </div>
-            <div class="modal-actions">
-                <button class="btn-save" onclick="updateProfile()">Сохранить</button>
-                <button class="btn-logout" onclick="logout()">Выйти</button>
-                <button class="btn-delete-acc" onclick="deleteAccount()">Удалить аккаунт</button>
-                <button class="btn-close" onclick="toggleModal('profile-modal')">Закрыть</button>
+            <span class="close" onclick="closeModal('profile-modal')">&times;</span>
+            <h2>Мой профиль</h2>
+            <div class="profile-details">
+                <p><strong>Ваш ID:</strong> <span id="prof-id"></span></p>
+                <p><strong>Дата создания:</strong> <span id="prof-date"></span></p>
+                <label>Имя:</label>
+                <input type="text" id="prof-name">
+                <label>Пароль:</label>
+                <input type="password" id="prof-password">
+                <button onclick="updateProfile()" class="btn-save">Сохранить изменения</button>
+                <hr>
+                <button onclick="logout()" class="btn-logout">Выйти из аккаунта</button>
+                <button onclick="deleteAccount()" class="btn-delete">Удалить аккаунт навсегда</button>
             </div>
         </div>
     </div>
 
     <!-- МОДАЛЬНОЕ ОКНО: СОЗДАНИЕ ГРУППЫ -->
-    <div id="group-create-modal" class="modal hidden">
+    <div id="group-modal" class="modal">
         <div class="modal-content">
-            <h3>Создать группу</h3>
-            <input type="text" id="new-group-name" placeholder="Название группы" required>
-            <p>Добавьте участников по ID (через запятую):</p>
-            <input type="text" id="new-group-members" placeholder="Пример: 12345, 67890">
-            <div class="modal-actions">
-                <button class="btn-save" onclick="submitCreateGroup()">Создать</button>
-                <button class="btn-close" onclick="toggleModal('group-create-modal')">Отмена</button>
-            </div>
+            <span class="close" onclick="closeModal('group-modal')">&times;</span>
+            <h2>Создать группу</h2>
+            <input type="text" id="group-name-input" placeholder="Название группы">
+            <p class="subtext">Группа создается с вами. Позже вы сможете добавить участников по ID.</p>
+            <button onclick="createGroup()" class="btn-save">Создать</button>
         </div>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО: УПРАВЛЕНИЕ ГРУППОЙ (ДЛЯ СОЗДАТЕЛЯ) -->
-    <div id="group-manage-modal" class="modal hidden">
+    <!-- МОДАЛЬНОЕ ОКНО: УПРАВЛЕНИЕ ГРУППОЙ -->
+    <div id="group-manage-modal" class="modal">
         <div class="modal-content">
-            <h3>Управление чатом</h3>
-            <label>Переименовать: <input type="text" id="manage-group-name"></label>
-            <button onclick="updateGroupName()">Обновить название</button>
-            <hr>
-            <label>Добавить участника (ID): <input type="text" id="add-member-id"></label>
-            <button onclick="addGroupMember()">Добавить</button>
-            <hr>
-            <h4>Участники:</h4>
-            <div id="group-members-list"></div>
-            <div class="modal-actions">
-                <button class="btn-close" onclick="toggleModal('group-manage-modal')">Закрыть</button>
+            <span class="close" onclick="closeModal('group-manage-modal')">&times;</span>
+            <h2>Управление группой</h2>
+            <label>Переименовать группу:</label>
+            <div class="row">
+                <input type="text" id="edit-group-name">
+                <button onclick="renameGroup()">ОК</button>
             </div>
+            
+            <label>Добавить участника (Введите ID):</label>
+            <div class="row">
+                <input type="text" id="add-member-id" maxlength="5">
+                <button onclick="addGroupMember()">Добавить</button>
+            </div>
+
+            <label>Список участников (Нажмите для удаления):</label>
+            <div id="group-members-list" class="members-list">
+                <!-- Список участников -->
+            </div>
+            
+            <hr>
+            <button onclick="deleteGroup()" class="btn-delete">Удалить группу полностью</button>
         </div>
     </div>
-    <!-- Загружаем Socket.io из глобальной сети CDN -->
-    <script src="https://socket.io"></script>
-    <!-- Только после этого подключаем вашу логику -->
-    <script src="app.js"></script>
+    <!-- ЛОГИКА ПРИЛОЖЕНИЯ (НАЧАЛО СКРИПТА) -->
+    <script>
+        const SERVER_URL = 'wss://://onrender.com';
+        let ws;
+        let currentUser = null;
+        let currentChats = [];
+        let activeChatId = null;
+        let editingMessageId = null;
+
+        // Инициализация соединения
+        function initWebSocket() {
+            ws = new WebSocket(SERVER_URL);
+
+            ws.onopen = () => {
+                console.log('Подключено к серверу Render');
+                const savedUser = localStorage.getItem('ink_user');
+                if (savedUser) {
+                    currentUser = JSON.parse(savedUser);
+                    ws.send(JSON.stringify({ type: 'LOGIN', id: currentUser.id, password: currentUser.password }));
+                }
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                switch (data.type) {
+                    case 'REGISTER_SUCCESS':
+                        alert(`Регистрация успешна! Ваш уникальный ID: ${data.user.id}. Запомните его для входа.`);
+                        toggleAuthForm(true);
+                        document.getElementById('login-id').value = data.user.id;
+                        break;
+                        
+                    case 'LOGIN_SUCCESS':
+                        currentUser = data.user;
+                        localStorage.setItem('ink_user', JSON.stringify(currentUser));
+                        showScreen('app-container');
+                        updateProfileDOM();
+                        break;
+
+                    case 'ACCOUNT_DELETED':
+                        alert('Ваш аккаунт успешно удален.');
+                        logout();
+                        break;
+
+                    case 'PROFILE_UPDATED':
+                        currentUser = data.user;
+                        localStorage.setItem('ink_user', JSON.stringify(currentUser));
+                        updateProfileDOM();
+                        alert('Профиль обновлен');
+                        break;
+
+                    case 'CHATS_LIST':
+                        currentChats = data.chats;
+                        renderChatsList();
+                        if (activeChatId) {
+                            renderActiveChat();
+                        }
+                        break;
+
+                    case 'NEW_MESSAGE':
+                    case 'MESSAGE_EDITED':
+                    case 'MESSAGE_DELETED':
+                        ws.send(JSON.stringify({ type: 'LOGIN', id: currentUser.id, password: currentUser.password }));
+                        break;
+
+                    case 'SEARCH_RESULT':
+                        if (confirm(`Найден пользователь ${data.user.name} (${data.user.id}). Начать диалог?`)) {
+                            createPrivateChat(data.user.id, data.user.name);
+                        }
+                        break;
+
+                    case 'ERROR':
+                        alert(data.message);
+                        break;
+                }
+            };
+
+            ws.onclose = () => {
+                console.log('Соединение закрыто. Переподключение...');
+                setTimeout(initWebSocket, 3000);
+            };
+        }
+
+        // Переключение экранов
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        function toggleAuthForm(isLogin) {
+            document.getElementById('login-form').classList.toggle('hidden', !isLogin);
+            document.getElementById('register-form').classList.toggle('hidden', isLogin);
+        }
+
+        // Авторизация
+        function register() {
+            const name = document.getElementById('reg-name').value.trim();
+            const password = document.getElementById('reg-password').value;
+            if(!name || !password) return alert('Заполните поля');
+            ws.send(JSON.stringify({ type: 'REGISTER', name, password }));
+        }
+
+        function login() {
+            const id = document.getElementById('login-id').value.trim();
+            const password = document.getElementById('login-password').value;
+            if(!id || !password) return alert('Заполните поля');
+            ws.send(JSON.stringify({ type: 'LOGIN', id, password }));
+        }
+
+        function logout() {
+            localStorage.removeItem('ink_user');
+            currentUser = null;
+            activeChatId = null;
+            showScreen('auth-container');
+        }
+
+        function deleteAccount() {
+            if(confirm('Вы уверены, что хотите удалить аккаунт? Все чаты будут стерты.')) {
+                ws.send(JSON.stringify({ type: 'DELETE_ACCOUNT', id: currentUser.id }));
+            }
+        }
+
+        function updateProfile() {
+            const name = document.getElementById('prof-name').value.trim();
+            const password = document.getElementById('prof-password').value;
+            if(!name || !password) return alert('Поля не должны быть пустыми');
+            ws.send(JSON.stringify({ type: 'UPDATE_PROFILE', id: currentUser.id, name, password }));
+        }
+
+        function updateProfileDOM() {
+            document.getElementById('my-name').innerText = currentUser.name;
+            document.getElementById('my-id-display').innerText = `ID: ${currentUser.id}`;
+            document.getElementById('my-avatar').innerText = currentUser.name.charAt(0).toUpperCase();
+            
+            document.getElementById('prof-id').innerText = currentUser.id;
+            document.getElementById('prof-date').innerText = new Date(currentUser.createdAt).toLocaleDateString();
+            document.getElementById('prof-name').value = currentUser.name;
+            document.getElementById('prof-password').value = currentUser.password;
+        }
+        // Поиск и создание чатов
+        function searchUser() {
+            const searchId = document.getElementById('search-input').value.trim();
+            if (searchId === currentUser.id) return alert('Нельзя искать себя');
+            if (searchId.length !== 5) return alert('ID должен состоять из 5 цифр');
+            ws.send(JSON.stringify({ type: 'SEARCH_USER', searchId }));
+        }
+
+        function createPrivateChat(targetId, targetName) {
+            const exist = currentChats.find(c => !c.isGroup && c.members.includes(targetId));
+            if (exist) {
+                selectChat(exist.id);
+                return;
+            }
+            ws.send(JSON.stringify({
+                type: 'CREATE_CHAT',
+                name: targetName,
+                isGroup: false,
+                creator: currentUser.id,
+                members: [currentUser.id, targetId]
+            }));
+        }
+
+        function createGroup() {
+            const name = document.getElementById('group-name-input').value.trim();
+            if (!name) return alert('Введите имя группы');
+            ws.send(JSON.stringify({
+                type: 'CREATE_CHAT',
+                name: name,
+                isGroup: true,
+                creator: currentUser.id,
+                members: [currentUser.id]
+            }));
+            closeModal('group-modal');
+            document.getElementById('group-name-input').value = '';
+        }
+
+        function renderChatsList() {
+            const listContainer = document.getElementById('chats-list');
+            listContainer.innerHTML = '';
+            
+            currentChats.forEach(chat => {
+                const el = document.createElement('div');
+                el.className = `chat-item ${chat.id === activeChatId ? 'active' : ''}`;
+                el.onclick = () => selectChat(chat.id);
+                
+                const avatarLetter = chat.name.charAt(0).toUpperCase();
+                const lastMsg = chat.messages.length > 0 ? chat.messages[chat.messages.length - 1].text : 'Нет сообщений';
+
+                el.innerHTML = `
+                    <div class="avatar">${avatarLetter}</div>
+                    <div class="chat-item-info">
+                        <div class="chat-item-row">
+                            <span class="bold">${chat.name}</span>
+                        </div>
+                        <div class="chat-item-row">
+                            <span class="subtext truncate">${lastMsg}</span>
+                        </div>
+                    </div>
+                `;
+                listContainer.appendChild(el);
+            });
+        }
+
+        function selectChat(chatId) {
+            activeChatId = chatId;
+            document.getElementById('chat-blank').classList.add('hidden');
+            document.getElementById('chat-active').classList.remove('hidden');
+            renderChatsList();
+            renderActiveChat();
+        }
+
+        function renderActiveChat() {
+            const chat = currentChats.find(c => c.id === activeChatId);
+            if (!chat) return;
+
+            document.getElementById('active-chat-name').innerText = chat.name;
+            document.getElementById('active-chat-status').innerText = chat.isGroup ? `${chat.members.length} участников` : 'Приватный чат';
+
+            const manageBtn = document.getElementById('manage-group-btn');
+            if (chat.isGroup && chat.creator === currentUser.id) {
+                manageBtn.classList.remove('hidden');
+            } else {
+                manageBtn.classList.add('hidden');
+            }
+
+            const msgContainer = document.getElementById('messages-container');
+            msgContainer.innerHTML = '';
+
+            chat.messages.forEach(msg => {
+                const isMy = msg.senderId === currentUser.id;
+                const msgEl = document.createElement('div');
+                msgEl.className = `message-wrapper ${isMy ? 'my' : ''}`;
+
+                msgEl.innerHTML = `
+                    <div class="message-box">
+                        ${chat.isGroup && !isMy ? `<div class="msg-sender">${msg.senderName}</div>` : ''}
+                        <div class="msg-text">${msg.text}</div>
+                        <div class="msg-meta">
+                            ${msg.edited ? '<span class="edited-label">изм.</span>' : ''}
+                            ${new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        </div>
+                        ${isMy ? `
+                            <div class="msg-actions">
+                                <span onclick="startEditMessage('${msg.id}', '${msg.text.replace(/'/g, "\\'")}')">✏️</span>
+                                <span onclick="deleteMessage('${msg.id}')">🗑️</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+                msgContainer.appendChild(msgEl);
+            });
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+        }
+
+        // Управление сообщениями
+        function sendMessage() {
+            const input = document.getElementById('message-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            if (editingMessageId) {
+                ws.send(JSON.stringify({
+                    type: 'EDIT_MESSAGE',
+                    chatId: activeChatId,
+                    messageId: editingMessageId,
+                    senderId: currentUser.id,
+                    newText: text
+                }));
+                editingMessageId = null;
+                document.getElementById('send-btn').innerText = 'Отправить';
+            } else {
+                ws.send(JSON.stringify({
+                    type: 'SEND_MESSAGE',
+                    chatId: activeChatId,
+                    senderId: currentUser.id,
+                    senderName: currentUser.name,
+                    text: text
+                }));
+            }
+            input.value = '';
+        }
+
+        function handleKeyPress(e) {
+            if(e.key === 'Enter') sendMessage();
+        }
+
+        function startEditMessage(id, text) {
+            editingMessageId = id;
+            const input = document.getElementById('message-input');
+            input.value = text;
+            input.focus();
+            document.getElementById('send-btn').innerText = 'Сохранить';
+        }
+
+        function deleteMessage(id) {
+            if(confirm('Удалить сообщение?')) {
+                ws.send(JSON.stringify({ type: 'DELETE_MESSAGE', chatId: activeChatId, messageId: id, senderId: currentUser.id }));
+            }
+        }
+
+        // Групповые настройки
+        function openGroupManagement() {
+            const chat = currentChats.find(c => c.id === activeChatId);
+            document.getElementById('edit-group-name').value = chat.name;
+            
+            const membersList = document.getElementById('group-members-list');
+            membersList.innerHTML = '';
+            
+            chat.members.forEach(mId => {
+                const p = document.createElement('div');
+                p.className = "member-item";
+                p.innerText = `ID: ${mId} ${mId === chat.creator ? '(Создатель)' : '(Исключить)'}`;
+                if (mId !== chat.creator) {
+                    p.onclick = () => kickMember(mId);
+                }
+                membersList.appendChild(p);
+            });
+
+            openModal('group-manage-modal');
+        }
+
+        function renameGroup() {
+            const newName = document.getElementById('edit-group-name').value.trim();
+            if(!newName) return;
+            ws.send(JSON.stringify({ type: 'MANAGE_GROUP', chatId: activeChatId, userId: currentUser.id, action: 'rename', newName }));
+            closeModal('group-manage-modal');
+        }
+
+        function addGroupMember() {
+            const targetId = document.getElementById('add-member-id').value.trim();
+            if(targetId.length !== 5) return alert('Неверный формат ID');
+            ws.send(JSON.stringify({ type: 'MANAGE_GROUP', chatId: activeChatId, userId: currentUser.id, action: 'add', targetId }));
+            document.getElementById('add-member-id').value = '';
+            closeModal('group-manage-modal');
+        }
+
+        function kickMember(targetId) {
+            if(confirm(`Исключить пользователя ${targetId} из чата?`)) {
+                ws.send(JSON.stringify({ type: 'MANAGE_GROUP', chatId: activeChatId, userId: currentUser.id, action: 'kick', targetId }));
+                closeModal('group-manage-modal');
+            }
+        }
+
+        function deleteGroup() {
+            if(confirm('Удалить группу полностью для всех участников?')) {
+                ws.send(JSON.stringify({ type: 'MANAGE_GROUP', chatId: activeChatId, userId: currentUser.id, action: 'delete' }));
+                closeModal('group-manage-modal');
+                document.getElementById('chat-active').classList.add('hidden');
+                document.getElementById('chat-blank').classList.remove('hidden');
+                activeChatId = null;
+            }
+        }
+
+        // Темизация и модальные окна
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            html.setAttribute('data-theme', currentTheme === 'dark' ? 'light' : 'dark');
+        }
+
+        function openModal(id) { document.getElementById(id).style.display = 'block'; }
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal')) {
+                event.target.style.display = 'none';
+            }
+        }
+
+        initWebSocket();
+    </script>
 </body>
 </html>
