@@ -147,8 +147,7 @@
         </div>
     </div>
     <!-- ЛОГИКА ПРИЛОЖЕНИЯ (НАЧАЛО СКРИПТА) -->
-    <script>
-        const SERVER_URL = 'wss://://onrender.com';
+            const SERVER_URL = 'wss://://onrender.com';
         let ws;
         let currentUser = null;
         let currentChats = [];
@@ -285,6 +284,7 @@
             document.getElementById('prof-name').value = currentUser.name;
             document.getElementById('prof-password').value = currentUser.password;
         }
+
         // Поиск и создание чатов
         function searchUser() {
             const searchId = document.getElementById('search-input').value.trim();
@@ -506,6 +506,7 @@
             html.setAttribute('data-theme', currentTheme === 'dark' ? 'light' : 'dark');
         }
 
+        // Вспомогательные функции модалок
         function openModal(id) { document.getElementById(id).style.display = 'block'; }
         function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
