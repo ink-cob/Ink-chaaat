@@ -1,18 +1,15 @@
-const API_URL = window.location.origin;
+const API_URL = 'https://chat-ink-chatttt.onrender.com';
 let currentUser = null;
 let activeChatId = null;
-let localContacts = []; // Теперь список изначально пустой
+let localContacts = JSON.parse(localStorage.getItem('ink_contacts')) || [];
 let pollInterval = null;
 
-
 // Инициализация при загрузке страницы
-// Инициализация при загрузке страницы (теперь без автологина)
 window.addEventListener('DOMContentLoaded', () => {
     initTheme();
     setupEventListeners();
-    // Строку checkSavedSession(); мы полностью удалили
+    checkSavedSession();
 });
-
 
 // Настройка темы оформления
 function initTheme() {
@@ -44,12 +41,13 @@ function setupEventListeners() {
 }
 
 // Автоматический вход, если сессия сохранена
-// Функция автологина теперь отключена, чтобы всегда открывалось окно авторизации
 function checkSavedSession() {
-    currentUser = null;
-    activeChatId = null;
+    const savedUser = localStorage.getItem('ink_user');
+    if (savedUser) {
+        currentUser = JSON.parse(savedUser);
+        showMainScreen();
+    }
 }
-
 
 // Переключение темы (светлая / темная)
 function toggleTheme() {
@@ -59,7 +57,6 @@ function toggleTheme() {
     localStorage.setItem('ink_theme', newTheme);
 }
 
-// Вход в аккаунт
 async function login() {
     const name = document.getElementById('auth-username').value.trim();
     const pass = document.getElementById('auth-password').value.trim();
@@ -76,15 +73,17 @@ async function login() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Ошибка входа');
 
-        currentUser = data.user;
-        localStorage.setItem('ink_user', JSON.stringify(currentUser));
+        // ИСПРАВЛЕНИЕ: Supabase возвращает массив, берем первый элемент
+        currentUser = Array.isArray(data.user) ? data.user[0] : data.user;
+        
+        sessionStorage.setItem('ink_user', JSON.stringify(currentUser));
         showMainScreen();
     } catch (err) {
         showError('auth-error', err.message);
     }
 }
 
-// Регистрация аккаунта
+
 async function register() {
     const name = document.getElementById('auth-username').value.trim();
     const pass = document.getElementById('auth-password').value.trim();
@@ -101,8 +100,10 @@ async function register() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Ошибка регистрации');
 
-        currentUser = data.user;
-        localStorage.setItem('ink_user', JSON.stringify(currentUser));
+        // ИСПРАВЛЕНИЕ: Берем первого пользователя из массива Supabase
+        currentUser = Array.isArray(data.user) ? data.user[0] : data.user;
+        
+        sessionStorage.setItem('ink_user', JSON.stringify(currentUser));
         showMainScreen();
     } catch (err) {
         showError('auth-error', err.message);
@@ -110,23 +111,16 @@ async function register() {
 }
 
 // Переключение экранов
-// Переключение экранов и загрузка личных контактов
 function showMainScreen() {
     document.getElementById('auth-screen').classList.add('hidden');
     document.getElementById('main-screen').classList.remove('hidden');
     document.getElementById('my-username-display').innerText = currentUser.username;
     document.getElementById('my-avatar').innerText = currentUser.username.charAt(0).toUpperCase();
     
-    // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Загружаем контакты только для текущего userId
-    const storageKey = `ink_contacts_${currentUser.userId}`;
-    localContacts = JSON.parse(localStorage.getItem(storageKey)) || [];
-    
     renderContacts();
     startPolling();
 }
-
 // Добавление контакта по ID
-// Добавление контакта по ID (в личный список)
 async function addFriend() {
     const idInput = document.getElementById('search-id');
     const friendId = idInput.value.trim();
@@ -142,10 +136,7 @@ async function addFriend() {
         if (!res.ok) throw new Error(data.error || 'Пользователь не найден');
 
         localContacts.push({ userId: data.userId, username: data.username });
-        
-        // Сохраняем в изолированный ключ
-        localStorage.setItem(`ink_contacts_${currentUser.userId}`, JSON.stringify(localContacts));
-        
+        localStorage.setItem('ink_contacts', JSON.stringify(localContacts));
         idInput.value = '';
         renderContacts();
     } catch (err) {
@@ -153,16 +144,12 @@ async function addFriend() {
     }
 }
 
-
 // Удаление контакта из списка
-// Удаление контакта из личного списка
 function deleteFriend() {
     if (!activeChatId) return;
-    if (confirm('Удалить этот contact и историю диалога?')) {
+    if (confirm('Удалить этот контакт и историю диалога?')) {
         localContacts = localContacts.filter(c => c.userId !== activeChatId);
-        
-        // Сохраняем изменения в изолированный ключ
-        localStorage.setItem(`ink_contacts_${currentUser.userId}`, JSON.stringify(localContacts));
+        localStorage.setItem('ink_contacts', JSON.stringify(localContacts));
         
         activeChatId = null;
         document.getElementById('chat-active').classList.add('hidden');
@@ -170,7 +157,6 @@ function deleteFriend() {
         renderContacts();
     }
 }
-
 
 // Отображение списка контактов
 function renderContacts() {
@@ -301,15 +287,19 @@ async function deleteMessage(msgId) {
     loadMessages();
 }
 
-// Работа с профилем пользователя
 function openProfile() {
     showError('profile-error', '');
-    document.getElementById('prof-id').innerText = currentUser.userId;
-    document.getElementById('prof-date').innerText = new Date(currentUser.createdAt).toLocaleDateString();
+    // Проверка обоих форматов ключа ID
+    const myId = currentUser.userId || currentUser.user_id;
+    const myDate = currentUser.createdAt || currentUser.created_at;
+    
+    document.getElementById('prof-id').innerText = myId;
+    document.getElementById('prof-date').innerText = new Date(myDate).toLocaleDateString();
     document.getElementById('prof-username').value = currentUser.username;
     document.getElementById('prof-password').value = '';
     document.getElementById('profile-modal').classList.remove('hidden');
 }
+
 
 async function saveProfile() {
     const newName = document.getElementById('prof-username').value.trim();
@@ -319,7 +309,7 @@ async function saveProfile() {
     if (!newName) return showError('profile-error', 'Имя не может быть пустым');
 
     try {
-        const res = await fetch(`${API_URL}/api/user/${currentUser.userId}`, {
+        const res = await fetch(`${API_URL}/api/user/${currentUser.userId || currentUser.user_id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: newName, password: newPass || undefined })
@@ -327,15 +317,25 @@ async function saveProfile() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Ошибка обновления профиля');
 
-        currentUser = data.user;
-        localStorage.setItem('ink_user', JSON.stringify(currentUser));
+        // ИСПРАВЛЕНИЕ: Корректно перезаписываем данные, учитывая формат базы данных
+        const updatedUser = Array.isArray(data.user) ? data.user[0] : data.user;
+        currentUser = {
+            userId: updatedUser.user_id || updatedUser.userId,
+            username: updatedUser.username,
+            createdAt: updatedUser.created_at || updatedUser.createdAt
+        };
+        
+        sessionStorage.setItem('ink_user', JSON.stringify(currentUser));
+        
         document.getElementById('my-username-display').innerText = currentUser.username;
         document.getElementById('profile-modal').classList.add('hidden');
+        alert('Профиль успешно обновлен!');
         renderContacts();
     } catch (err) {
         showError('profile-error', err.message);
     }
 }
+
 
 // Удаление аккаунта
 async function deleteAccount() {
@@ -375,20 +375,4 @@ function showError(elementId, text) {
 function escapeHtml(text) {
     return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
-// Функция выхода из аккаунта
-function logout() {
-    if (confirm('Вы уверены, что хотите выйти из аккаунта?')) {
-        // Очищаем данные текущего пользователя из памяти браузера
-        currentUser = null;
-        activeChatId = null;
-        localStorage.removeItem('ink_user');
-        
-        // Останавливаем ежесекундное обновление сообщений
-        if (pollInterval) clearInterval(pollInterval);
-        
-        // Перезагружаем страницу, чтобы вернуть пользователя на экран авторизации
-        location.reload();
-    }
-}
-
 
