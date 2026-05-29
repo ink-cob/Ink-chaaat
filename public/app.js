@@ -44,13 +44,12 @@ function setupEventListeners() {
 }
 
 // Автоматический вход, если сессия сохранена
+// Функция автологина теперь отключена, чтобы всегда открывалось окно авторизации
 function checkSavedSession() {
-    const savedUser = localStorage.getItem('ink_user');
-    if (savedUser) {
-        currentUser = JSON.parse(savedUser);
-        showMainScreen();
-    }
+    currentUser = null;
+    activeChatId = null;
 }
+
 
 // Переключение темы (светлая / темная)
 function toggleTheme() {
