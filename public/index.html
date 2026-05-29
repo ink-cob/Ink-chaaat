@@ -67,33 +67,37 @@
             </div>
         </main>
     </div>
-<!-- Контейнер мессенджера -->
-<div class="messenger-wrapper" style="display: flex; height: 100vh;">
+<!-- Обертка для всего чата -->
+<div class="chat-layout" style="display: flex; height: 100vh;">
     
-    <!-- НОВАЯ ФУНКЦИЯ: Боковая панель комнат -->
-    <div class="chat-sidebar" style="width: 250px; background-color: #1e1e24; color: #fff; padding: 15px; border-right: 1px solid #333;">
-        <h3 style="margin-top: 0;">Комнаты</h3>
+    <!-- НОВАЯ ФУНКЦИЯ: Боковая панель для выбора комнат -->
+    <div class="rooms-sidebar" style="width: 220px; background: #202225; color: #fff; padding: 15px;">
+        <h3 style="margin-top: 0; color: #8e9297; font-size: 12px; text-transform: uppercase;">Комнаты</h3>
         <ul id="rooms-list" style="list-style: none; padding: 0; margin: 0;">
-            <li class="room-item active" data-room="general" style="padding: 10px; cursor: pointer; background: #333; border-radius: 5px; margin-bottom: 5px;"># Общий чат</li>
-            <li class="room-item" data-room="games" style="padding: 10px; cursor: pointer; border-radius: 5px; margin-bottom: 5px;"># Игры</li>
-            <li class="room-item" data-room="music" style="padding: 10px; cursor: pointer; border-radius: 5px; margin-bottom: 5px;"># Музыка</li>
+            <li class="room-btn active" data-room="general" style="padding: 8px 10px; cursor: pointer; background: #34363c; border-radius: 4px; margin-bottom: 4px;"># общий-чат</li>
+            <li class="room-btn" data-room="games" style="padding: 8px 10px; cursor: pointer; border-radius: 4px; margin-bottom: 4px;"># игры</li>
+            <li class="room-btn" data-room="music" style="padding: 8px 10px; cursor: pointer; border-radius: 4px; margin-bottom: 4px;"># музыка</li>
         </ul>
     </div>
 
-    <!-- ВАШ ПРЕЖНИЙ БЛОК ЧАТА (добавьте flex: 1, чтобы он занимал остаток экрана) -->
-    <div class="main-chat-area" style="flex: 1; display: flex; flex-direction: column;">
-        <!-- Тут идет ваш текущий заголовок, окно сообщений и форма ввода -->
+    <!-- ВАШ ТЕКУЩИЙ БЛОК ЧАТА -->
+    <!-- Обязательно добавьте ему стиль style="flex: 1; display: flex; flex-direction: column;" чтобы он занял оставшееся место -->
+    <div class="chat-main" style="flex: 1; display: flex; flex-direction: column;">
         <div class="chat-header">
-            <h2 id="chat-title"># Общий чат</h2>
+            <h2 id="room-title"># общий-чат</h2>
         </div>
         
-        <!-- Ваш существующий блок с сообщениями -->
-        <div id="messages-container"></div> 
+        <!-- Сюда выводятся сообщения (ваш старый блок) -->
+        <div id="messages"></div> 
         
-        <!-- Ваша существующая форма отправки -->
-        <div class="input-container">...</div>
+        <!-- Ваша форма/инпут отправки -->
+        <div class="chat-input">
+            <input type="text" id="message-input">
+            <button id="send-button">Отправить</button>
+        </div>
     </div>
 </div>
+
 
     <!-- Модальное окно личного профиля -->
     <div id="profile-modal" class="modal hidden">
