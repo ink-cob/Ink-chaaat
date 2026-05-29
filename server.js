@@ -1,164 +1,212 @@
 const express = require('express');
 const path = require('path');
-const fs = require('fs');
+const { Pool } = require('pg');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
+// ВСТАВЬТЕ СЮДА ВАШУ ССЫЛКУ ИЗ SUPABASE (НЕ ЗАБУДЬТЕ ВПИСАТЬ СВОЙ ПАРОЛЬ ВНУТРЬ НЕЁ)
 const pool = new Pool({
     connectionString: 'postgresql://postgres.mcwrrzxocnncikfnvvgy:max092010M_m@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true',
     ssl: { rejectUnauthorized: false }
 });
 
-// Пути к файлам нашей базы данных
-const USERS_FILE = path.join(__dirname, 'users.json');
-const MESSAGES_FILE = path.join(__dirname, 'messages.json');
-
-// Функции для чтения и записи данных на диск
-function readData(filePath) {
+// Проверка и создание таблиц в облаке
+async function initDB() {
     try {
-        if (!fs.existsSync(filePath)) return [];
-        const content = fs.readFileSync(filePath, 'utf8');
-        return content ? JSON.parse(content) : [];
-    } catch (e) {
-        return [];
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                user_id VARCHAR(5) PRIMARY KEY,
+                username VARCHAR(50) NOT NULL,
+                password VARCHAR(100) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS messages (
+                id VARCHAR(20) PRIMARY KEY,
+                sender_id VARCHAR(5) NOT NULL,
+                receiver_id VARCHAR(5) NOT NULL,
+                text TEXT NOT NULL,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                edited BOOLEAN DEFAULT FALSE
+            );
+        `);
+        console.log("База данных Supabase успешно подключена!");
+    } catch (err) {
+        console.error("Ошибка Supabase:", err);
     }
 }
+initDB();
 
-function writeData(filePath, data) {
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
-}
-
-// Жесткий обработчик главной страницы
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Регистрация
-app.post('/api/register', (req, res) => {
+app.post('/api/register', async (req, res) => {
     const { username, password } = req.body;
-    if (!username || !password) return res.status(400).json({ error: 'Имя и пароль обязательны' });
+    if (!username || !password) return res.status(400).json({ error: 'Заполните поля' });
 
-    const users = readData(USERS_FILE);
-    
-    // Генерация уникального 5-значного ID
-    let userId;
-    do {
-        userId = Math.floor(10000 + Math.random() * 90000).toString();
-    } while (users.some(u => u.userId === userId));
+    try {
+        let userId;
+        let isUnique = false;
+        while (!isUnique) {
+            userId = Math.floor(10000 + Math.random() * 90000).toString();
+            const check = await pool.query('SELECT user_id FROM users WHERE user_id = $1', [userId]);
+            if (check.rows.length === 0) isUnique = true;
+        }
 
-    const newUser = { userId, username, password, createdAt: new Date().toISOString() };
-    users.push(newUser);
-    writeData(USERS_FILE, users);
+        const result = await pool.query(
+            'INSERT INTO users (user_id, username, password) VALUES ($1, $2, $3) RETURNING user_id, username, created_at',
+            [userId, username, password]
+        );
 
-    const { password: _, ...userWithoutPassword } = newUser;
-    res.status(201).json({ user: userWithoutPassword });
+        const user = result.rows[0];
+        res.status(201).json({ 
+            user: { userId: user.user_id, username: user.username, createdAt: user.created_at } 
+        });
+    } catch (err) {
+        res.status(500).json({ error: 'Ошибка регистрации' });
+    }
 });
 
 // Вход
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
-    const users = readData(USERS_FILE);
-    const user = users.find(u => u.username === username && u.password === password);
-    
-    if (!user) return res.status(401).json({ error: 'Неверное имя или пароль' });
+    try {
+        const result = await pool.query(
+            'SELECT user_id, username, created_at FROM users WHERE username = $1 AND password = $2',
+            [username, password]
+        );
+        
+        if (result.rows.length === 0) return res.status(401).json({ error: 'Неверные данные' });
 
-    const { password: _, ...userWithoutPassword } = user;
-    res.json({ user: userWithoutPassword });
+        const user = result.rows[0];
+        res.json({ 
+            user: { userId: user.user_id, username: user.username, createdAt: user.created_at } 
+        });
+    } catch (err) {
+        res.status(500).json({ error: 'Ошибка входа' });
+    }
 });
 
-// Поиск пользователя по ID
-app.get('/api/user/:id', (req, res) => {
-    const users = readData(USERS_FILE);
-    const user = users.find(u => u.userId === req.params.id);
-    if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
-    res.json({ userId: user.userId, username: user.username });
+// Поиск друга по ID
+app.get('/api/user/:id', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT user_id, username FROM users WHERE user_id = $1', [req.params.id]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Не найден' });
+        
+        const user = result.rows[0];
+        res.json({ userId: user.user_id, username: user.username });
+    } catch (err) {
+        res.status(500).json({ error: 'Ошибка поиска' });
+    }
 });
-
-// Получение сообщений
-app.get('/api/messages', (req, res) => {
+// Получение истории сообщений
+app.get('/api/messages', async (req, res) => {
     const { user1, user2 } = req.query;
     if (!user1 || !user2) return res.status(400).json({ error: 'Не указаны участники' });
 
-    const messages = readData(MESSAGES_FILE);
-    const chatHistory = messages.filter(m => 
-        (m.senderId === user1 && m.receiverId === user2) || 
-        (m.senderId === user2 && m.receiverId === user1)
-    );
-    res.json(chatHistory);
+    try {
+        const result = await pool.query(
+            `SELECT id, sender_id AS "senderId", receiver_id AS "receiverId", text, timestamp, edited 
+             FROM messages 
+             WHERE (sender_id = $1 AND receiver_id = $2) OR (sender_id = $2 AND receiver_id = $1)
+             ORDER BY timestamp ASC`,
+            [user1, user2]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: 'Ошибка загрузки переписки' });
+    }
 });
 
-// Отправка сообщения
-app.post('/api/messages', (req, res) => {
+// Отправка нового сообщения
+app.post('/api/messages', async (req, res) => {
     const { senderId, receiverId, text } = req.body;
     if (!senderId || !receiverId || !text) return res.status(400).json({ error: 'Заполните поля' });
 
-    const messages = readData(MESSAGES_FILE);
-    const newMessage = {
-        id: Math.random().toString(36).substr(2, 9),
-        senderId, receiverId, text,
-        timestamp: new Date().toISOString(), edited: false
-    };
-
-    messages.push(newMessage);
-    writeData(MESSAGES_FILE, messages);
-    res.status(201).json(newMessage);
+    try {
+        const msgId = Math.random().toString(36).substr(2, 9);
+        const result = await pool.query(
+            `INSERT INTO messages (id, sender_id, receiver_id, text) 
+             VALUES ($1, $2, $3, $4) 
+             RETURNING id, sender_id AS "senderId", receiver_id AS "receiverId", text, timestamp, edited`,
+            [msgId, senderId, receiverId, text]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: 'Ошибка отправки сообщения' });
+    }
 });
 
 // Редактирование сообщения
-app.put('/api/messages/:id', (req, res) => {
+app.put('/api/messages/:id', async (req, res) => {
     const { text } = req.body;
-    const messages = readData(MESSAGES_FILE);
-    const msg = messages.find(m => m.id === req.params.id);
-    
-    if (!msg) return res.status(404).json({ error: 'Не найдено' });
-    
-    msg.text = text;
-    msg.edited = true;
-    writeData(MESSAGES_FILE, messages);
-    res.json(msg);
+    try {
+        const result = await pool.query(
+            'UPDATE messages SET text = $1, edited = true WHERE id = $2 RETURNING id, text, edited',
+            [text, req.params.id]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Не найдено' });
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: 'Ошибка редактирования' });
+    }
 });
 
 // Удаление сообщения
-app.delete('/api/messages/:id', (req, res) => {
-    let messages = readData(MESSAGES_FILE);
-    messages = messages.filter(m => m.id !== req.params.id);
-    writeData(MESSAGES_FILE, messages);
-    res.json({ success: true });
+app.delete('/api/messages/:id', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM messages WHERE id = $1', [req.params.id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Ошибка удаления сообщения' });
+    }
 });
 
 // Обновление профиля
-app.put('/api/user/:id', (req, res) => {
+app.put('/api/user/:id', async (req, res) => {
     const { username, password } = req.body;
-    const users = readData(USERS_FILE);
-    const user = users.find(u => u.userId === req.params.id);
+    try {
+        let result;
+        if (password) {
+            result = await pool.query(
+                'UPDATE users SET username = $1, password = $2 WHERE user_id = $3 RETURNING user_id, username, created_at',
+                [username, password, req.params.id]
+            );
+        } else {
+            result = await pool.query(
+                'UPDATE users SET username = $1 WHERE user_id = $2 RETURNING user_id, username, created_at',
+                [username, req.params.id]
+            );
+        }
 
-    if (!user) return res.status(404).json({ error: 'Не найден' });
-
-    if (username) user.username = username;
-    if (password) user.password = password;
-
-    writeData(USERS_FILE, users);
-    const { password: _, ...userWithoutPassword } = user;
-    res.json({ user: userWithoutPassword });
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Не найден' });
+        
+        const user = result.rows[0];
+        res.json({ 
+            user: { userId: user.user_id, username: user.username, createdAt: user.created_at } 
+        });
+    } catch (err) {
+        res.status(500).json({ error: 'Ошибка обновления профиля' });
+    }
 });
 
-// Удаление аккаунта
-app.delete('/api/user/:id', (req, res) => {
+// Полное удаление аккаунта
+app.delete('/api/user/:id', async (req, res) => {
     const userId = req.params.id;
-    let users = readData(USERS_FILE);
-    let messages = readData(MESSAGES_FILE);
-
-    users = users.filter(u => u.userId !== userId);
-    messages = messages.filter(m => m.senderId !== userId && m.receiverId !== userId);
-
-    writeData(USERS_FILE, users);
-    writeData(MESSAGES_FILE, messages);
-    res.json({ success: true });
+    try {
+        await pool.query('DELETE FROM users WHERE user_id = $1', [userId]);
+        await pool.query('DELETE FROM messages WHERE sender_id = $1 OR receiver_id = $2', [userId, userId]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Ошибка удаления аккаунта' });
+    }
 });
 
+// Запуск Node.js сервера
 app.listen(PORT, () => {
-    console.log(`Сервер запущен на порту ${PORT}`);
+    console.log(`Сервер мессенджера Chat Ink успешно запущен на порту ${PORT}`);
 });
