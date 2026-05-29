@@ -6,12 +6,13 @@ let pollInterval = null;
 
 
 // Инициализация при загрузке страницы
+// Инициализация при загрузке страницы (теперь без автологина)
 window.addEventListener('DOMContentLoaded', () => {
     initTheme();
     setupEventListeners();
-    document.getElementById('btn-logout').addEventListener('click', logout);
-    checkSavedSession();
+    // Строку checkSavedSession(); мы полностью удалили
 });
+
 
 // Настройка темы оформления
 function initTheme() {
