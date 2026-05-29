@@ -1,5 +1,5 @@
-const SUPABASE_URL = "https://YOUR_SUPABASE_URL.supabase.co";
-const SUPABASE_KEY = "YOUR_SUPABASE_ANON_KEY";
+const SUPABASE_URL = "postgresql://postgres.mcwrrzxocnncikfnvvgy:max092010M_m@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true";
+const SUPABASE_KEY = "max092010M_m";
 const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let currentUser = null;
