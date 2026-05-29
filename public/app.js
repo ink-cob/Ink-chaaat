@@ -61,7 +61,6 @@ async function login() {
     const name = document.getElementById('auth-username').value.trim();
     const pass = document.getElementById('auth-password').value.trim();
     showError('auth-error', '');
-
     if (!name || !pass) return showError('auth-error', 'Заполните все поля');
 
     try {
@@ -73,22 +72,19 @@ async function login() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Ошибка входа');
 
-        // ИСПРАВЛЕНИЕ: Supabase возвращает массив, берем первый элемент
+        // ИСПРАВЛЕНО: Корректно извлекаем объект пользователя
         currentUser = Array.isArray(data.user) ? data.user[0] : data.user;
-        
-        sessionStorage.setItem('ink_user', JSON.stringify(currentUser));
+        localStorage.setItem('ink_user', JSON.stringify(currentUser));
         showMainScreen();
     } catch (err) {
         showError('auth-error', err.message);
     }
 }
 
-
 async function register() {
     const name = document.getElementById('auth-username').value.trim();
     const pass = document.getElementById('auth-password').value.trim();
     showError('auth-error', '');
-
     if (!name || !pass) return showError('auth-error', 'Заполните все поля');
 
     try {
@@ -100,10 +96,9 @@ async function register() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Ошибка регистрации');
 
-        // ИСПРАВЛЕНИЕ: Берем первого пользователя из массива Supabase
+        // ИСПРАВЛЕНО: Корректно извлекаем объект пользователя
         currentUser = Array.isArray(data.user) ? data.user[0] : data.user;
-        
-        sessionStorage.setItem('ink_user', JSON.stringify(currentUser));
+        localStorage.setItem('ink_user', JSON.stringify(currentUser));
         showMainScreen();
     } catch (err) {
         showError('auth-error', err.message);
