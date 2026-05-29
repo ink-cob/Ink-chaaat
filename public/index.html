@@ -5,102 +5,130 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat Ink</title>
     <link rel="stylesheet" href="style.css">
+    <!-- Подключение Supabase CDN -->
+    <script src="https://jsdelivr.net"></script>
 </head>
 <body>
-    <div id="auth-screen" class="screen">
-        <div class="auth-box">
-            <h2>Chat Ink</h2>
-            <div id="auth-error" class="error-msg hidden"></div>
-            <input type="text" id="auth-username" placeholder="Имя пользователя" required>
-            <input type="password" id="auth-password" placeholder="Пароль" required>
-            <button id="btn-login" class="btn-primary">Войти</button>
-            <button id="btn-register" class="btn-secondary">Регистрация</button>
+
+    <!-- ОКНО АВТОРИЗАЦИИ / РЕГИСТРАЦИИ -->
+    <div id="auth-container" class="auth-container">
+        <div class="auth-card">
+            <h2 id="auth-title">Вход в Chat Ink</h2>
+            <form id="auth-form">
+                <div class="input-group">
+                    <input type="text" id="auth-name" placeholder="Имя пользователя" required>
+                </div>
+                <div class="input-group" id="id-group" style="display: none;">
+                    <input type="text" id="auth-id" placeholder="Ваш 5-значный ID (для входа)" maxlength="5">
+                </div>
+                <div class="input-group">
+                    <input type="password" id="auth-password" placeholder="Пароль" required>
+                </div>
+                <button type="submit" id="auth-submit-btn">Войти</button>
+            </form>
+            <p id="auth-toggle-text">Нет аккаунта? <span id="auth-toggle-link">Зарегистрироваться</span></p>
         </div>
     </div>
 
-    <div id="main-screen" class="screen hidden">
+    <!-- ГЛАВНЫЙ ИНТЕРФЕЙС МЕССЕНДЖЕРА -->
+    <div id="app-container" class="app-container" style="display: none;">
+        
+        <!-- Левая панель: Списки и поиск -->
         <aside class="sidebar">
             <div class="sidebar-header">
-                <div class="user-summary" id="open-profile">
-                    <div class="avatar" id="my-avatar">U</div>
-                    <span id="my-username-display">Имя</span>
+                <div class="user-avatar" id="my-profile-btn">👤</div>
+                <div class="search-box">
+                    <input type="text" id="search-input" placeholder="Поиск по ID...">
+                    <button id="search-btn">🔍</button>
                 </div>
-                <button id="btn-theme-toggle" class="btn-icon">🌓</button>
+                <button id="create-group-btn" title="Создать группу">👥</button>
             </div>
-            
-            <!-- Переключатель между Друзьями и Комнатами -->
-            <div class="tabs-bar" style="display: flex; padding: 0 15px; gap: 10px; margin-bottom: 5px;">
-                <button id="tab-friends" class="tab-btn active" style="flex: 1; background: var(--bg-input); border: none; padding: 8px; color: var(--text-main); border-radius: 6px; cursor: pointer; font-weight: bold;">Друзья</button>
-                <button id="tab-rooms" class="tab-btn" style="flex: 1; background: transparent; border: none; padding: 8px; color: var(--text-muted); border-radius: 6px; cursor: pointer;">Комнаты</button>
+            <div class="chats-list" id="chats-list">
+                <!-- Сюда динамически загружаются чаты -->
             </div>
-            
-            <!-- Контейнер поиска друзей -->
-            <div class="search-bar" id="search-friend-wrapper">
-                <input type="text" id="search-id" placeholder="Поиск по 5-значному ID...">
-                <button id="btn-add-friend" class="btn-primary">+</button>
-            </div>
-
-            <!-- Контейнер создания комнат (скрыт по умолчанию) -->
-            <div class="search-bar hidden" id="search-room-wrapper">
-                <input type="text" id="room-name-input" placeholder="Название новой комнаты...">
-                <button id="btn-create-room" class="btn-primary" style="background: #2ea44f;">+</button>
-            </div>
-
-            <div id="search-error" class="error-msg hidden" style="padding: 0 15px;"></div>
-
-            <!-- Общий список элементов -->
-            <div class="contacts-list" id="contacts-container"></div>
         </aside>
 
+        <!-- Правая панель: Окно чата -->
         <main class="chat-area">
-            <div id="chat-welcome" class="chat-welcome">
-                <p>Выберите чат, чтобы начать общение</p>
+            <div class="chat-blank" id="chat-blank">
+                <p>Выберите, кому хотите написать</p>
             </div>
             
-            <div id="chat-active" class="chat-active hidden">
-                <header class="chat-header">
-                    <div class="chat-info" style="display: flex; align-items: center; gap: 10px;">
-                        <!-- Кружок статуса в шапке -->
-                        <div id="active-status-dot" style="width: 10px; height: 10px; border-radius: 50%; display: none;"></div>
-                        <div>
-                            <span id="active-chat-name">Собеседник</span>
-                            <span id="active-chat-id" class="subtext">#00000</span>
-                        </div>
+            <div class="chat-active" id="chat-active" style="display: none;">
+                <div class="chat-header">
+                    <div class="chat-info">
+                        <h3 id="current-chat-title">Название чата</h3>
+                        <span id="current-chat-status">участники</span>
                     </div>
-                    <button id="btn-delete-friend" class="btn-danger-text">Удалить чат</button>
-                </header>
+                    <div class="chat-actions">
+                        <button id="theme-toggle" title="Сменить тему">🌙</button>
+                        <button id="chat-settings-btn" title="Управление чатом" style="display: none;">⚙️</button>
+                    </div>
+                </div>
 
-                <div class="messages-container" id="messages-container"></div>
+                <div class="messages-container" id="messages-container">
+                    <!-- Сюда летят сообщения -->
+                </div>
 
-                <footer class="chat-footer">
+                <div class="input-area">
                     <input type="text" id="message-input" placeholder="Напишите сообщение...">
-                    <button id="btn-send-message" class="btn-send">▶</button>
-                </footer>
+                    <button id="send-message-btn">➡️</button>
+                </div>
             </div>
         </main>
     </div>
 
-    <div id="profile-modal" class="modal hidden">
+    <!-- МОДАЛЬНОЕ ОКНО: ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ -->
+    <div id="profile-modal" class="modal">
         <div class="modal-content">
-            <header class="modal-header">
-                <h3>Ваш профиль</h3>
-                <button id="btn-close-profile" class="btn-icon">✕</button>
-            </header>
-            <div class="modal-body">
-                <p><strong>Ваш ID:</strong> <span id="prof-id"></span></p>
-                <p><strong>Дата создания:</strong> <span id="prof-date"></span></p>
-                <div id="profile-error" class="error-msg hidden"></div>
-                <label>Изменить имя:</label>
-                <input type="text" id="prof-username">
-                <label>Изменить пароль:</label>
-                <input type="password" id="prof-password" placeholder="Новый пароль">
-                <button id="btn-save-profile" class="btn-primary">Сохранить изменения</button>
-                <hr>
-                <button id="btn-logout" class="btn-secondary" style="margin-bottom: 10px; color: var(--text-main); border-color: var(--border-color);">Выйти из аккаунта</button>
-                <button id="btn-delete-account" class="btn-danger">Удалить аккаунт</button>
+            <span class="close-modal" id="close-profile">&times;</span>
+            <h2>Мой профиль</h2>
+            <div class="profile-details">
+                <p><strong>Имя:</strong> <input type="text" id="profile-name-input"></p>
+                <p><strong>ID:</strong> <span id="profile-id"></span></p>
+                <p><strong>Пароль:</strong> <input type="password" id="profile-pass-input"></p>
+                <p><strong>Создан:</strong> <span id="profile-date"></span></p>
+            </div>
+            <div class="modal-buttons">
+                <button id="save-profile-btn" class="btn-primary">Сохранить изменения</button>
+                <button id="delete-acc-btn" class="btn-danger">Удалить аккаунт</button>
             </div>
         </div>
     </div>
-    <script src="app.js"></script>
+
+    <!-- МОДАЛЬНОЕ ОКНО: СОЗДАНИЕ ГРУППЫ -->
+    <div id="group-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" id="close-group">&times;</span>
+            <h2>Создать группу</h2>
+            <input type="text" id="group-name-input" placeholder="Название группы" required>
+            <p>Введите ID участников через запятую:</p>
+            <input type="text" id="group-members-input" placeholder="Например: 12345, 54321">
+            <button id="submit-group-btn" class="btn-primary">Создать</button>
+        </div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО: УПРАВЛЕНИЕ ЧАТОМ (ДЛЯ СОЗДАТЕЛЯ) -->
+    <div id="chat-mgmt-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" id="close-mgmt">&times;</span>
+            <h2>Управление чатом</h2>
+            <input type="text" id="edit-chat-title" placeholder="Новое название">
+            <button id="rename-chat-btn" class="btn-primary">Переименовать</button>
+            <hr>
+            <h3>Участники</h3>
+            <div id="mgmt-members-list"></div>
+            <div class="add-member-section">
+                <input type="text" id="add-member-id" placeholder="ID нового участника">
+                <button id="add-member-btn" class="btn-success">Добавить</button>
+            </div>
+            <hr>
+            <button id="delete-chat-btn" class="btn-danger">Удалить чат полностью</button>
+        </div>
+    </div>
+
+    <!-- Подключаем логику -->
+    <script src="server.js"></script>
 </body>
 </html>
+
