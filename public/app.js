@@ -8,6 +8,7 @@ let pollInterval = null;
 window.addEventListener('DOMContentLoaded', () => {
     initTheme();
     setupEventListeners();
+    document.getElementById('btn-logout').addEventListener('click', logout);
     checkSavedSession();
 });
 
@@ -358,4 +359,20 @@ function showError(elementId, text) {
 function escapeHtml(text) {
     return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
+// Функция выхода из аккаунта
+function logout() {
+    if (confirm('Вы уверены, что хотите выйти из аккаунта?')) {
+        // Очищаем данные текущего пользователя из памяти браузера
+        currentUser = null;
+        activeChatId = null;
+        localStorage.removeItem('ink_user');
+        
+        // Останавливаем ежесекундное обновление сообщений
+        if (pollInterval) clearInterval(pollInterval);
+        
+        // Перезагружаем страницу, чтобы вернуть пользователя на экран авторизации
+        location.reload();
+    }
+}
+
 
