@@ -9,71 +9,50 @@
 </head>
 <body class="dark-theme">
 
-    <!-- ЭКРАН АВТОРИЗАЦИИ И РЕГИСТРАЦИИ -->
+    <!-- СТРАНИЦА ВХОДА / РЕГИСТРАЦИИ -->
     <div id="auth-screen" class="auth-container">
         <div class="auth-card">
             <div class="logo">Ink Chat</div>
             <h2 id="auth-title">Вход</h2>
-            
             <div class="input-group">
-                <input type="text" id="auth-username" placeholder="Имя пользователя" required>
+                <input type="text" id="auth-username" placeholder="Имя пользователя">
             </div>
             <div class="input-group">
-                <input type="password" id="auth-password" placeholder="Пароль" required>
+                <input type="password" id="auth-password" placeholder="Пароль">
             </div>
             <div class="input-group hidden" id="reg-id-field">
-                <input type="text" id="generated-id" placeholder="Ваш уникальный ID" readonly>
+                <input type="text" id="generated-id" placeholder="Ваш ID" readonly>
             </div>
-
             <button id="auth-submit-btn" class="btn-main">Войти</button>
             <p class="auth-toggle">Нет аккаунта? <span id="toggle-auth-mode">Зарегистрироваться</span></p>
         </div>
     </div>
 
-    <!-- ГЛАВНОЕ ОКНО МЕССЕНДЖЕРА -->
+    <!-- СТРАНИЦА МЕССЕНДЖЕРА -->
     <div id="app-screen" class="app-container hidden">
-        
-        <!-- Левая панель: Список контактов -->
         <aside class="sidebar">
             <div class="sidebar-header">
-                <div class="menu-icon" id="profile-menu-btn">
-                    <i class="fas fa-bars"></i>
-                </div>
+                <div class="menu-icon" id="profile-menu-btn"><i class="fas fa-bars"></i></div>
                 <div class="search-bar">
                     <i class="fas fa-search"></i>
-                    <input type="text" id="search-input" placeholder="Поиск друга по ID (5 знаков)...">
+                    <input type="text" id="search-input" placeholder="Поиск по ID (5 знаков)...">
                     <button id="add-chat-btn" class="hidden"><i class="fas fa-plus"></i></button>
                 </div>
             </div>
-
-            <div class="chats-list" id="chats-list">
-                <!-- Сюда подгружаются активные диалоги -->
-            </div>
+            <div class="chats-list" id="chats-list"></div>
         </aside>
 
-        <!-- Правая панель: Окно переписки -->
         <main class="chat-window">
-            <!-- Экран по умолчанию -->
-            <div id="no-chat-selected" class="no-chat">
-                <span>Выберите, кому хотели бы написать</span>
-            </div>
-
-            <!-- Активный диалог -->
+            <div id="no-chat-selected" class="no-chat"><span>Выберите, кому хотели бы написать</span></div>
             <div id="active-chat-container" class="chat-container hidden">
                 <div class="chat-header">
-                    <div class="chat-info" id="chat-header-info">
-                        <!-- Имя собеседника и статус В сети/Не в сети -->
-                    </div>
+                    <div class="chat-info" id="chat-header-info"></div>
                     <div class="header-actions">
-                        <button id="delete-friend-btn" class="btn-icon" title="Удалить друга и переписку"><i class="fas fa-user-minus"></i></button>
+                        <button id="delete-friend-btn" class="btn-icon"><i class="fas fa-user-minus"></i></button>
                         <button id="theme-toggle" class="btn-icon"><i class="fas fa-moon"></i></button>
                     </div>
                 </div>
-
-                <!-- Лента сообщений -->
                 <div class="messages-display" id="messages-display"></div>
-
-                <!-- Панель ввода -->
                 <div class="chat-input-area">
                     <input type="text" id="message-input" placeholder="Напишите сообщение...">
                     <button id="send-msg-btn" class="btn-send"><i class="fas fa-paper-plane"></i></button>
@@ -82,7 +61,7 @@
         </main>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО: ПРОФИЛЬ -->
+    <!-- МОДАЛЬНОЕ ОКНО ПРОФИЛЯ -->
     <div id="modal-profile" class="modal hidden">
         <div class="modal-content">
             <div class="modal-header">
@@ -93,20 +72,24 @@
                 <p><strong>Ваш ID:</strong> <span id="prof-id"></span></p>
                 <p><strong>Дата создания:</strong> <span id="prof-date"></span></p>
                 <div class="input-group">
-                    <label>Изменить имя:</label>
+                    <label>Имя:</label>
                     <input type="text" id="prof-name">
                 </div>
                 <div class="input-group">
-                    <label>Изменить пароль:</label>
+                    <label>Новый пароль:</label>
                     <input type="password" id="prof-pass">
                 </div>
-                <button id="save-profile-btn" class="btn-main">Сохранить изменения</button>
-                <hr style="margin: 20px 0; border-color: var(--border-color);">
+                <button id="save-profile-btn" class="btn-main">Сохранить</button>
+                <hr style="margin: 15px 0; border-color: var(--border-color);">
                 <button id="delete-acc-btn" class="btn-danger">Удалить аккаунт навсегда</button>
             </div>
         </div>
     </div>
 
-    <script src="client.js"></script>
+    <!-- ПОДКЛЮЧЕНИЕ СКРИПТОВ ЧАСТЯМИ -->
+    <script src="client1.js"></script>
+    <script src="client2.js"></script>
+    <script src="client3.js"></script>
+    <script src="client4.js"></script>
 </body>
 </html>
