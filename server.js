@@ -2,24 +2,17 @@ const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Жесткая настройка CORS для работы с GitHub Pages
-app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', 'https://ink-cob.github.io/Ink-chaaat/');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-
-    if (req.method === 'OPTIONS') {
-        return res.sendStatus(200);
-    }
-    next();
-});
+// ВОТ ЭТА СТРОКА ВМЕСТО СТАРЫХ НАСТРОЕК CORS:
+// Она заставляет сервер открывать интерфейс чата из папки public
+app.use(express.static('public'));
 
 app.use(express.json());
 
-// База данных в оперативной памяти
+// База данных в оперативной памяти (это оставляем как было)
 let users = [];
 let messages = [];
+
+
 
 // Генерация 5-значного ID
 function generateUniqueId() {
