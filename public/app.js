@@ -1,8 +1,9 @@
 const API_URL = window.location.origin;
 let currentUser = null;
 let activeChatId = null;
-let localContacts = JSON.parse(localStorage.getItem('ink_contacts')) || [];
+let localContacts = []; // Теперь список изначально пустой
 let pollInterval = null;
+
 
 // Инициализация при загрузке страницы
 window.addEventListener('DOMContentLoaded', () => {
@@ -109,16 +110,23 @@ async function register() {
 }
 
 // Переключение экранов
+// Переключение экранов и загрузка личных контактов
 function showMainScreen() {
     document.getElementById('auth-screen').classList.add('hidden');
     document.getElementById('main-screen').classList.remove('hidden');
     document.getElementById('my-username-display').innerText = currentUser.username;
     document.getElementById('my-avatar').innerText = currentUser.username.charAt(0).toUpperCase();
     
+    // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Загружаем контакты только для текущего userId
+    const storageKey = `ink_contacts_${currentUser.userId}`;
+    localContacts = JSON.parse(localStorage.getItem(storageKey)) || [];
+    
     renderContacts();
     startPolling();
 }
+
 // Добавление контакта по ID
+// Добавление контакта по ID (в личный список)
 async function addFriend() {
     const idInput = document.getElementById('search-id');
     const friendId = idInput.value.trim();
@@ -134,7 +142,10 @@ async function addFriend() {
         if (!res.ok) throw new Error(data.error || 'Пользователь не найден');
 
         localContacts.push({ userId: data.userId, username: data.username });
-        localStorage.setItem('ink_contacts', JSON.stringify(localContacts));
+        
+        // Сохраняем в изолированный ключ
+        localStorage.setItem(`ink_contacts_${currentUser.userId}`, JSON.stringify(localContacts));
+        
         idInput.value = '';
         renderContacts();
     } catch (err) {
@@ -142,12 +153,16 @@ async function addFriend() {
     }
 }
 
+
 // Удаление контакта из списка
+// Удаление контакта из личного списка
 function deleteFriend() {
     if (!activeChatId) return;
-    if (confirm('Удалить этот контакт и историю диалога?')) {
+    if (confirm('Удалить этот contact и историю диалога?')) {
         localContacts = localContacts.filter(c => c.userId !== activeChatId);
-        localStorage.setItem('ink_contacts', JSON.stringify(localContacts));
+        
+        // Сохраняем изменения в изолированный ключ
+        localStorage.setItem(`ink_contacts_${currentUser.userId}`, JSON.stringify(localContacts));
         
         activeChatId = null;
         document.getElementById('chat-active').classList.add('hidden');
@@ -155,6 +170,7 @@ function deleteFriend() {
         renderContacts();
     }
 }
+
 
 // Отображение списка контактов
 function renderContacts() {
