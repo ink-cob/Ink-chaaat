@@ -1,16 +1,27 @@
 const express = require('express');
+const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ВОТ ЭТА СТРОКА ВМЕСТО СТАРЫХ НАСТРОЕК CORS:
-// Она заставляет сервер открывать интерфейс чата из папки public
-app.use(express.static('public'));
-
+// Автоматическая раздача стилей и скриптов из папки public
+app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
-// База данных в оперативной памяти (это оставляем как было)
+// Жесткий обработчик главной страницы (убирает ошибку 404)
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'), (err) => {
+        if (err) {
+            res.status(500).send("Критическая ошибка: файл index.html не найден внутри папки public!");
+        }
+    });
+});
+
+// База данных в оперативной памяти
 let users = [];
 let messages = [];
+
+// ... далее оставляете весь остальной код (регистрация /api/register и т.д.)
+
 
 
 
