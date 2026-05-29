@@ -1,37 +1,28 @@
-const API_URL = 'https://chat-ink-chatttt.onrender.com';
+const API_URL = window.location.origin;
 let currentUser = null;
 let activeChatId = null;
-let localContacts = JSON.parse(localStorage.getItem('ink_contacts')) || [];
+let localContacts = [];
 let pollInterval = null;
 
-// Инициализация при загрузке страницы
 window.addEventListener('DOMContentLoaded', () => {
     initTheme();
     setupEventListeners();
-    checkSavedSession();
 });
 
-// Настройка темы оформления
 function initTheme() {
     const savedTheme = localStorage.getItem('ink_theme') || 'dark';
     document.documentElement.setAttribute('data-theme', savedTheme);
 }
 
 function setupEventListeners() {
-    // Авторизация
     document.getElementById('btn-login').addEventListener('click', login);
     document.getElementById('btn-register').addEventListener('click', register);
-    
-    // Переключение темы
     document.getElementById('btn-theme-toggle').addEventListener('click', toggleTheme);
-    
-    // Профиль
     document.getElementById('open-profile').addEventListener('click', openProfile);
     document.getElementById('btn-close-profile').addEventListener('click', () => document.getElementById('profile-modal').classList.add('hidden'));
     document.getElementById('btn-save-profile').addEventListener('click', saveProfile);
+    document.getElementById('btn-logout').addEventListener('click', logout);
     document.getElementById('btn-delete-account').addEventListener('click', deleteAccount);
-    
-    // Работа с контактами и чатом
     document.getElementById('btn-add-friend').addEventListener('click', addFriend);
     document.getElementById('btn-delete-friend').addEventListener('click', deleteFriend);
     document.getElementById('btn-send-message').addEventListener('click', sendMessage);
@@ -40,16 +31,6 @@ function setupEventListeners() {
     });
 }
 
-// Автоматический вход, если сессия сохранена
-function checkSavedSession() {
-    const savedUser = localStorage.getItem('ink_user');
-    if (savedUser) {
-        currentUser = JSON.parse(savedUser);
-        showMainScreen();
-    }
-}
-
-// Переключение темы (светлая / темная)
 function toggleTheme() {
     const currentTheme = document.documentElement.getAttribute('data-theme');
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
@@ -61,7 +42,6 @@ async function login() {
     const name = document.getElementById('auth-username').value.trim();
     const pass = document.getElementById('auth-password').value.trim();
     showError('auth-error', '');
-
     if (!name || !pass) return showError('auth-error', 'Заполните все поля');
 
     try {
@@ -73,22 +53,17 @@ async function login() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Ошибка входа');
 
-        // ИСПРАВЛЕНИЕ: Supabase возвращает массив, берем первый элемент
-        currentUser = Array.isArray(data.user) ? data.user[0] : data.user;
-        
-        sessionStorage.setItem('ink_user', JSON.stringify(currentUser));
+        currentUser = data.user;
         showMainScreen();
     } catch (err) {
         showError('auth-error', err.message);
     }
 }
 
-
 async function register() {
     const name = document.getElementById('auth-username').value.trim();
     const pass = document.getElementById('auth-password').value.trim();
     showError('auth-error', '');
-
     if (!name || !pass) return showError('auth-error', 'Заполните все поля');
 
     try {
@@ -100,34 +75,34 @@ async function register() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Ошибка регистрации');
 
-        // ИСПРАВЛЕНИЕ: Берем первого пользователя из массива Supabase
-        currentUser = Array.isArray(data.user) ? data.user[0] : data.user;
-        
-        sessionStorage.setItem('ink_user', JSON.stringify(currentUser));
+        currentUser = data.user;
         showMainScreen();
     } catch (err) {
         showError('auth-error', err.message);
     }
 }
-
-// Переключение экранов
 function showMainScreen() {
     document.getElementById('auth-screen').classList.add('hidden');
     document.getElementById('main-screen').classList.remove('hidden');
     document.getElementById('my-username-display').innerText = currentUser.username;
     document.getElementById('my-avatar').innerText = currentUser.username.charAt(0).toUpperCase();
     
+    const myId = currentUser.userId || currentUser.user_id;
+    const storageKey = `ink_contacts_${myId}`;
+    localContacts = JSON.parse(localStorage.getItem(storageKey)) || [];
+    
     renderContacts();
     startPolling();
 }
-// Добавление контакта по ID
+
 async function addFriend() {
     const idInput = document.getElementById('search-id');
     const friendId = idInput.value.trim();
     showError('search-error', '');
 
+    const myId = currentUser.userId || currentUser.user_id;
     if (friendId.length !== 5) return showError('search-error', 'ID должен состоять из 5 цифр');
-    if (friendId === currentUser.userId) return showError('search-error', 'Нельзя добавить себя');
+    if (friendId === myId) return showError('search-error', 'Нельзя добавить себя');
     if (localContacts.some(c => c.userId === friendId)) return showError('search-error', 'Контакт уже добавлен');
 
     try {
@@ -136,7 +111,7 @@ async function addFriend() {
         if (!res.ok) throw new Error(data.error || 'Пользователь не найден');
 
         localContacts.push({ userId: data.userId, username: data.username });
-        localStorage.setItem('ink_contacts', JSON.stringify(localContacts));
+        localStorage.setItem(`ink_contacts_${myId}`, JSON.stringify(localContacts));
         idInput.value = '';
         renderContacts();
     } catch (err) {
@@ -144,12 +119,12 @@ async function addFriend() {
     }
 }
 
-// Удаление контакта из списка
 function deleteFriend() {
     if (!activeChatId) return;
     if (confirm('Удалить этот контакт и историю диалога?')) {
+        const myId = currentUser.userId || currentUser.user_id;
         localContacts = localContacts.filter(c => c.userId !== activeChatId);
-        localStorage.setItem('ink_contacts', JSON.stringify(localContacts));
+        localStorage.setItem(`ink_contacts_${myId}`, JSON.stringify(localContacts));
         
         activeChatId = null;
         document.getElementById('chat-active').classList.add('hidden');
@@ -158,7 +133,6 @@ function deleteFriend() {
     }
 }
 
-// Отображение списка контактов
 function renderContacts() {
     const container = document.getElementById('contacts-container');
     container.innerHTML = '';
@@ -178,7 +152,6 @@ function renderContacts() {
     });
 }
 
-// Открытие чата с пользователем
 function openChat(contact) {
     activeChatId = contact.userId;
     document.getElementById('chat-welcome').classList.add('hidden');
@@ -190,18 +163,18 @@ function openChat(contact) {
     loadMessages();
 }
 
-// Отправка текстового сообщения
 async function sendMessage() {
     const input = document.getElementById('message-input');
     const text = input.value.trim();
-    if (!text || !activeChatId) return;
+    const myId = currentUser.userId || currentUser.user_id;
+    if (!text || !activeChatId || !myId) return;
 
     try {
         const res = await fetch(`${API_URL}/api/messages`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                senderId: currentUser.userId,
+                senderId: myId,
                 receiverId: activeChatId,
                 text: text
             })
@@ -214,19 +187,19 @@ async function sendMessage() {
         console.error('Ошибка отправки сообщения:', err);
     }
 }
-// Загрузка сообщений диалога
 async function loadMessages() {
-    if (!activeChatId || !currentUser) return;
+    const myId = currentUser ? (currentUser.userId || currentUser.user_id) : null;
+    if (!activeChatId || !myId) return;
 
     try {
-        const res = await fetch(`${API_URL}/api/messages?user1=${currentUser.userId}&user2=${activeChatId}`);
+        const res = await fetch(`${API_URL}/api/messages?user1=${myId}&user2=${activeChatId}`);
         const messages = await res.json();
         
         const container = document.getElementById('messages-container');
         container.innerHTML = '';
 
         messages.forEach(msg => {
-            const isMy = msg.senderId === currentUser.userId;
+            const isMy = msg.senderId === myId;
             const div = document.createElement('div');
             div.className = `msg ${isMy ? 'my' : 'other'}`;
             
@@ -238,12 +211,8 @@ async function loadMessages() {
                 <div class="msg-meta">${metaText}</div>
             `;
 
-            // Управление сообщениями только для своих текстов
             if (isMy) {
-                div.addEventListener('contextmenu', (e) => {
-                    e.preventDefault();
-                    manageMessage(msg);
-                });
+                div.addEventListener('contextmenu', (e) => { e.preventDefault(); manageMessage(msg); });
                 div.addEventListener('click', (e) => {
                     if(e.target.className !== 'msg-text' && e.target.className !== 'msg') return;
                     manageMessage(msg);
@@ -258,7 +227,6 @@ async function loadMessages() {
     }
 }
 
-// Меню действий (Редактировать / Удалить)
 function manageMessage(msg) {
     const action = prompt('Выберите действие:\n1 - Редактировать\n2 - Удалить сообщение');
     if (action === '1') {
@@ -289,7 +257,6 @@ async function deleteMessage(msgId) {
 
 function openProfile() {
     showError('profile-error', '');
-    // Проверка обоих форматов ключа ID
     const myId = currentUser.userId || currentUser.user_id;
     const myDate = currentUser.createdAt || currentUser.created_at;
     
@@ -300,16 +267,16 @@ function openProfile() {
     document.getElementById('profile-modal').classList.remove('hidden');
 }
 
-
 async function saveProfile() {
     const newName = document.getElementById('prof-username').value.trim();
     const newPass = document.getElementById('prof-password').value.trim();
     showError('profile-error', '');
+    const myId = currentUser.userId || currentUser.user_id;
 
     if (!newName) return showError('profile-error', 'Имя не может быть пустым');
 
     try {
-        const res = await fetch(`${API_URL}/api/user/${currentUser.userId || currentUser.user_id}`, {
+        const res = await fetch(`${API_URL}/api/user/${myId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: newName, password: newPass || undefined })
@@ -317,51 +284,43 @@ async function saveProfile() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Ошибка обновления профиля');
 
-        // ИСПРАВЛЕНИЕ: Корректно перезаписываем данные, учитывая формат базы данных
-        const updatedUser = Array.isArray(data.user) ? data.user[0] : data.user;
-        currentUser = {
-            userId: updatedUser.user_id || updatedUser.userId,
-            username: updatedUser.username,
-            createdAt: updatedUser.created_at || updatedUser.createdAt
-        };
-        
-        sessionStorage.setItem('ink_user', JSON.stringify(currentUser));
-        
+        currentUser = data.user;
         document.getElementById('my-username-display').innerText = currentUser.username;
         document.getElementById('profile-modal').classList.add('hidden');
-        alert('Профиль успешно обновлен!');
+        alert('Профиль успешно изменен!');
         renderContacts();
     } catch (err) {
         showError('profile-error', err.message);
     }
 }
 
+function logout() {
+    if (confirm('Вы уверены, что хотите выйти из аккаунта?')) {
+        currentUser = null;
+        activeChatId = null;
+        if (pollInterval) clearInterval(pollInterval);
+        location.reload();
+    }
+}
 
-// Удаление аккаунта
 async function deleteAccount() {
+    const myId = currentUser.userId || currentUser.user_id;
     if (!confirm('Вы уверены, что хотите НАВСЕГДА удалить свой аккаунт?')) return;
 
     try {
-        const res = await fetch(`${API_URL}/api/user/${currentUser.userId}`, { method: 'DELETE' });
+        const res = await fetch(`${API_URL}/api/user/${myId}`, { method: 'DELETE' });
         if (!res.ok) throw new Error('Не удалось удалить аккаунт');
-
-        localStorage.removeItem('ink_user');
-        localStorage.removeItem('ink_contacts');
         location.reload();
     } catch (err) {
         showError('profile-error', err.message);
     }
 }
 
-// Запуск опроса обновлений
 function startPolling() {
     if (pollInterval) clearInterval(pollInterval);
-    pollInterval = setInterval(() => {
-        loadMessages();
-    }, 2000);
+    pollInterval = setInterval(loadMessages, 2000);
 }
 
-// Вспомогательные утилиты
 function showError(elementId, text) {
     const el = document.getElementById(elementId);
     if (text) {
@@ -375,4 +334,3 @@ function showError(elementId, text) {
 function escapeHtml(text) {
     return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
-
