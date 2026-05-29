@@ -141,7 +141,7 @@ async function addFriend() {
 
 // Удаление контакта из списка
 function deleteFriend() {
-    if (!acticonst API_URL = 'https://onrender.com';
+    if (!acticonst API_URL = 'https://ink-chaaaat.onrender.com';
 let currentUser = null;
 let activeChatId = null;
 let isGroupChat = false; // Флаг: общая комната или личный чат
