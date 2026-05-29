@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- Окно авторизации -->
+    <!-- Экран входа и регистрации -->
     <div id="auth-screen" class="screen">
         <div class="auth-box">
             <h2>Chat Ink</h2>
@@ -21,7 +21,7 @@
 
     <!-- Главный экран мессенджера -->
     <div id="main-screen" class="screen hidden">
-        <!-- Боковая панель -->
+        <!-- Левая панель с контактами -->
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="user-summary" id="open-profile">
@@ -38,11 +38,10 @@
             <div id="search-error" class="error-msg hidden"></div>
 
             <div class="contacts-list" id="contacts-container">
-                <!-- Сюда динамически добавляются контакты -->
+                <!-- Контакты загружаются сюда -->
             </div>
         </aside>
-
-        <!-- Окно чата -->
+        <!-- Правая зона чата -->
         <main class="chat-area">
             <div id="chat-welcome" class="chat-welcome">
                 <p>Выберите чат, чтобы начать общение</p>
@@ -58,7 +57,7 @@
                 </header>
 
                 <div class="messages-container" id="messages-container">
-                    <!-- Сюда выводятся сообщения -->
+                    <!-- Сообщения загружаются сюда -->
                 </div>
 
                 <footer class="chat-footer">
@@ -69,7 +68,7 @@
         </main>
     </div>
 
-    <!-- Модальное окно профиля -->
+    <!-- Модальное окно личного профиля -->
     <div id="profile-modal" class="modal hidden">
         <div class="modal-content">
             <header class="modal-header">
@@ -78,21 +77,24 @@
             </header>
             <div class="modal-body">
                 <p><strong>Ваш ID:</strong> <span id="prof-id"></span></p>
-                <p><strong>Дата регистрации:</strong> <span id="prof-date"></span></p>
+                <p><strong>Дата создания:</strong> <span id="prof-date"></span></p>
                 <div id="profile-error" class="error-msg hidden"></div>
                 
                 <label>Изменить имя:</label>
                 <input type="text" id="prof-username">
                 
+                <label>Изменить пароль:</label>
+                <input type="password" id="prof-password" placeholder="Новый пароль">
                 
                 <button id="btn-save-profile" class="btn-primary">Сохранить изменения</button>
                 <hr>
+                <!-- Исправленная кнопка выхода -->
+                <button id="btn-logout" class="btn-secondary" style="margin-bottom: 10px; color: var(--text-main); border-color: var(--border-color);">Выйти из аккаунта</button>
                 <button id="btn-delete-account" class="btn-danger">Удалить аккаунт</button>
             </div>
         </div>
     </div>
 
-    <!-- Скрипт логики (будет предоставлен в следующих частях) -->
     <script src="app.js"></script>
 </body>
 </html>
