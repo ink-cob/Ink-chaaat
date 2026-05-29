@@ -7,6 +7,11 @@ const PORT = process.env.PORT || 3000;
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
+const pool = new Pool({
+    connectionString: 'postgresql://postgres.mcwrrzxocnncikfnvvgy:max092010M_m@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true',
+    ssl: { rejectUnauthorized: false }
+});
+
 // Пути к файлам нашей базы данных
 const USERS_FILE = path.join(__dirname, 'users.json');
 const MESSAGES_FILE = path.join(__dirname, 'messages.json');
