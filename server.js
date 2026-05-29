@@ -1,339 +1,347 @@
-const WebSocket = require('ws');
-const fs = require('fs');
-const path = require('path');
+// CHAT INK — ЛОКАЛЬНАЯ КЛИЕНТСКАЯ ЛОГИКА (ЛИЧНЫЕ ЧАТЫ)
+let currentUser = null;
+let currentChatId = null;
 
-// Порт для развертывания на хостингах (Render, Railway, Amvera берут его из env)
-const PORT = process.env.PORT || 3000;
-const wss = new WebSocket.Server({ port: PORT });
+// Инициализация локальной базы данных
+if (!localStorage.getItem('ink_db_users')) localStorage.setItem('ink_db_users', JSON.stringify([]));
+if (!localStorage.getItem('ink_db_chats')) localStorage.setItem('ink_db_chats', JSON.stringify([]));
 
-const DB_FILE = path.join(__dirname, 'database.json');
+function getUsers() { return JSON.parse(localStorage.getItem('ink_db_users')); }
+function saveUsers(users) { localStorage.setItem('ink_db_users', JSON.stringify(users)); }
+function getChats() { return JSON.parse(localStorage.getItem('ink_db_chats')); }
+function saveChats(chats) { localStorage.setItem('ink_db_chats', JSON.stringify(chats)); }
 
-// ГЛОБАЛЬНАЯ БАЗА ДАННЫХ
-let db = {
-    users: [],  // { id, username, password, createdAt, isOnline }
-    chats: []   // { id, isGroup, name, creatorId, members: [], messages: [] }
-};
-
-// Загрузка данных при старте сервера
-if (fs.existsSync(DB_FILE)) {
-    try {
-        db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-        // Сбрасываем статус сети всем при перезапуске сервера
-        db.users.forEach(u => u.isOnline = false);
-    } catch (e) {
-        console.error("Ошибка чтения базы данных, создана новая:", e);
-    }
-}
-
-// Функция сохранения базы данных в файл
-function saveDB() {
-    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf8');
-}
-
-// Хранилище активных соединений (ключ: ws, значение: userId)
-const activeConnections = new Map();
-
-console.log(`Сервер Chat Ink запущен на порту ${PORT}`);
-
-wss.on('connection', (ws) => {
-    
-    ws.on('message', (message) => {
-        try {
-            const data = JSON.parse(message);
-            handleClientMessage(ws, data);
-        } catch (err) {
-            console.error("Ошибка обработки пакета:", err);
-        }
-    });
-
-    ws.on('close', () => {
-        const userId = activeConnections.get(ws);
-        if (userId) {
-            const user = db.users.find(u => u.id === userId);
-            if (user) {
-                user.isOnline = false;
-                broadcastStatusChange(userId);
-            }
-            activeConnections.delete(ws);
-            console.log(`Пользователь ${userId} отключился.`);
-        }
-    });
+document.addEventListener('DOMContentLoaded', () => {
+    setupTheme();
+    tryAutoLogin();
+    setupProfileEvents();
 });
 
-// КОРНЕВОЙ ОБРАБОТЧИК ЗАПРОСОВ КЛИЕНТА
-function handleClientMessage(ws, data) {
-    switch (data.type) {
-        
-        // РЕГИСТРАЦИЯ
-        case 'register':
-            const existingId = db.users.find(u => u.id === data.id);
-            if (existingId) {
-                return ws.send(JSON.stringify({ type: 'auth_error', message: 'Ошибка генерации ID. Попробуйте еще раз.' }));
-            }
-            
-            const newUser = {
-                id: data.id,
-                username: data.username,
-                password: data.password,
-                createdAt: new Date().toLocaleDateString('ru-RU'),
-                isOnline: true
-            };
-            
-            db.users.push(newUser);
-            saveDB();
-            
-            activeConnections.set(ws, newUser.id);
-            sendAuthSuccess(ws, newUser);
-            broadcastStatusChange(newUser.id);
-            break;
+// УПРАВЛЕНИЕ ТЕМОЙ
+function setupTheme() {
+    const savedTheme = localStorage.getItem('ink_theme') || 'dark-theme';
+    document.body.className = savedTheme;
+    updateThemeIcon();
+}
 
-        // ВХОД
-        case 'login':
-            const user = db.users.find(u => u.username === data.username && u.password === data.password);
-            if (!user) {
-                return ws.send(JSON.stringify({ type: 'auth_error', message: 'Неверное имя пользователя или пароль!' }));
-            }
-            
+document.getElementById('theme-toggle').addEventListener('click', () => {
+    document.body.className = document.body.classList.contains('dark-theme') ? 'light-theme' : 'dark-theme';
+    localStorage.setItem('ink_theme', document.body.className);
+    updateThemeIcon();
+});
+
+function updateThemeIcon() {
+    const icon = document.querySelector('#theme-toggle i');
+    if (icon) icon.className = document.body.classList.contains('dark-theme') ? 'fas fa-sun' : 'fas fa-moon';
+}
+
+function toggleModal(id, show) {
+    const modal = document.getElementById(id);
+    if (show) modal.classList.remove('hidden');
+    else modal.classList.add('hidden');
+}
+
+// РЕГИСТРАЦИЯ И ВХОД
+let isSignUpMode = false;
+
+document.getElementById('toggle-auth-mode').addEventListener('click', () => {
+    isSignUpMode = !isSignUpMode;
+    const title = document.getElementById('auth-title');
+    const btn = document.getElementById('auth-submit-btn');
+    const toggleSpan = document.getElementById('toggle-auth-mode');
+    const idField = document.getElementById('reg-id-field');
+    const idInput = document.getElementById('generated-id');
+
+    if (isSignUpMode) {
+        title.innerText = 'Регистрация';
+        btn.innerText = 'Создать аккаунт';
+        toggleSpan.innerText = 'Войти';
+        idField.classList.remove('hidden');
+        idInput.value = Math.floor(10000 + Math.random() * 90000).toString();
+    } else {
+        title.innerText = 'Вход';
+        btn.innerText = 'Войти';
+        toggleSpan.innerText = 'Зарегистрироваться';
+        idField.classList.add('hidden');
+    }
+});
+
+document.getElementById('auth-submit-btn').addEventListener('click', () => {
+    const name = document.getElementById('auth-username').value.trim();
+    const pass = document.getElementById('auth-password').value.trim();
+    if (!name || !pass) return alert('Заполните все поля!');
+
+    let users = getUsers();
+
+    if (isSignUpMode) {
+        const id = document.getElementById('generated-id').value;
+        const newUser = { id, username: name, password: pass, createdAt: new Date().toLocaleDateString('ru-RU'), isOnline: true };
+        users.push(newUser);
+        saveUsers(users);
+        loginSuccess(newUser);
+    } else {
+        const user = users.find(u => u.username === name && u.password === pass);
+        if (!user) return alert('Неверное имя или пароль!');
+        user.isOnline = true;
+        saveUsers(users);
+        loginSuccess(user);
+    }
+});
+
+function tryAutoLogin() {
+    const saved = localStorage.getItem('ink_current_session');
+    if (saved) {
+        const savedUser = JSON.parse(saved);
+        let users = getUsers();
+        const user = users.find(u => u.id === savedUser.id);
+        if (user) {
             user.isOnline = true;
-            activeConnections.set(ws, user.id);
-            sendAuthSuccess(ws, user);
-            broadcastStatusChange(user.id);
-            break;
-
-        // ОБНОВЛЕНИЕ ПРОФИЛЯ
-        case 'update_profile':
-            const profUser = db.users.find(u => u.id === data.userId);
-            if (profUser) {
-                profUser.username = data.username;
-                profUser.password = data.password;
-                saveDB();
-                pushChatsToParticipants(profUser.id);
-            }
-            break;
-
-        // УДАЛЕНИЕ АККАУНТА
-        case 'delete_account':
-            db.users = db.users.filter(u => u.id !== data.userId);
-            
-            // Удаляем пользователя изо всех групп
-            db.chats.forEach(chat => {
-                chat.members = chat.members.filter(mId => mId !== data.userId);
-                // Удаляем сообщения пользователя
-                chat.messages = chat.messages.filter(m => m.senderId !== data.userId);
-            });
-            
-            // Удаляем пустые личные чаты, где он участвовал
-            db.chats = db.chats.filter(chat => !(!chat.isGroup && chat.members.length < 2));
-            
-            saveDB();
-            activeConnections.delete(ws);
-            // Оповещаем оставшихся о смене структуры чатов
-            db.users.forEach(u => pushChatsToParticipants(u.id));
-            break;
-
-        // РУЧНАЯ СИНХРОНИЗАЦИЯ ЧАТОВ
-        case 'sync_chats':
-            const syncUserId = activeConnections.get(ws);
-            if (syncUserId) pushChatsToParticipants(syncUserId);
-            break;
-        // СОЗДАНИЕ ЧАТА ИЛИ ГРУППЫ
-        case 'create_chat':
-            const targetUser = db.users.find(u => u.id === data.targetId);
-            if (!targetUser) {
-                return ws.send(JSON.stringify({ type: 'auth_error', message: 'Пользователь с таким ID не найден!' }));
-            }
-
-            // Проверяем, существует ли уже личный чат между этими пользователями
-            if (!data.isGroup) {
-                const existingChat = db.chats.find(c => !c.isGroup && c.members.includes(data.creatorId) && c.members.includes(data.targetId));
-                if (existingChat) return; // Чат уже есть, просто игнорируем
-            }
-
-            const newChat = {
-                id: Math.floor(100000 + Math.random() * 900000).toString(), // Уникальный ID чата (6 знаков)
-                isGroup: data.isGroup,
-                name: data.isGroup ? data.groupName : '',
-                creatorId: data.creatorId,
-                members: [data.creatorId, data.targetId],
-                messages: []
-            };
-
-            db.chats.push(newChat);
-            saveDB();
-
-            // Обновляем список чатов у всех участников этого чата
-            newChat.members.forEach(mId => pushChatsToParticipants(mId));
-            break;
-
-        // ОТПРАВКА СООБЩЕНИЯ
-        case 'send_message':
-            const chat = db.chats.find(c => c.id === data.chatId);
-            if (!chat) return;
-
-            const newMsg = {
-                id: Math.floor(100000 + Math.random() * 900000).toString(),
-                senderId: data.senderId,
-                text: data.text,
-                time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-                edited: false
-            };
-
-            chat.messages.push(newMsg);
-            saveDB();
-
-            // Рассылаем обновленный чат всем его участникам в сети
-            chat.members.forEach(mId => pushChatsToParticipants(mId));
-            break;
-
-        // РЕДАКТИРОВАНИЕ СООБЩЕНИЯ
-        case 'edit_message':
-            const editChat = db.chats.find(c => c.id === data.chatId);
-            if (!editChat) return;
-
-            const msgToEdit = editChat.messages.find(m => m.id === data.messageId);
-            if (msgToEdit) {
-                msgToEdit.text = data.text;
-                msgToEdit.edited = true;
-                saveDB();
-                editChat.members.forEach(mId => pushChatsToParticipants(mId));
-            }
-            break;
-
-        // УДАЛЕНИЕ СООБЩЕНИЯ
-        case 'delete_message':
-            const delChat = db.chats.find(c => c.id === data.chatId);
-            if (!delChat) return;
-
-            delChat.messages = delChat.messages.filter(m => m.id !== data.messageId);
-            saveDB();
-            delChat.members.forEach(mId => pushChatsToParticipants(mId));
-            break;
-
-        // ПЕРЕИМЕНОВАНИЕ ГРУППЫ (ТОЛЬКО ДЛЯ СОЗДАТЕЛЯ)
-        case 'update_group_name':
-            const gChat = db.chats.find(c => c.id === data.chatId);
-            if (gChat) {
-                gChat.name = data.name;
-                saveDB();
-                gChat.members.forEach(mId => pushChatsToParticipants(mId));
-            }
-            break;
-
-        // ДОБАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯ В ГРУППУ (ТОЛЬКО ДЛЯ СОЗДАТЕЛЯ)
-        case 'group_add_user':
-            const addChat = db.chats.find(c => c.id === data.chatId);
-            const userToAdd = db.users.find(u => u.id === data.userId);
-            
-            if (!userToAdd) {
-                return ws.send(JSON.stringify({ type: 'auth_error', message: 'Пользователь с таким ID не найден!' }));
-            }
-            if (addChat && !addChat.members.includes(data.userId)) {
-                addChat.members.push(data.userId);
-                saveDB();
-                addChat.members.forEach(mId => pushChatsToParticipants(mId));
-            }
-            break;
-
-        // КИК ПОЛЬЗОВАТЕЛЯ ИЗ ГРУППЫ (ТОЛЬКО ДЛЯ СОЗДАТЕЛЯ)
-        case 'group_kick_user':
-            const kickChat = db.chats.find(c => c.id === data.chatId);
-            if (kickChat) {
-                const kickedId = data.userId;
-                kickChat.members = kickChat.members.filter(mId => mId !== kickedId);
-                saveDB();
-                
-                // Оповещаем оставшихся участников и самого исключенного
-                pushChatsToParticipants(kickedId); 
-                kickChat.members.forEach(mId => pushChatsToParticipants(mId));
-            }
-            break;
-
-        // ВЫХОД ИЗ ГРУППЫ ПО СОБСТВЕННОМУ ЖЕЛАНИЮ
-        case 'group_leave':
-            const leaveChat = db.chats.find(c => c.id === data.chatId);
-            if (leaveChat) {
-                leaveChat.members = leaveChat.members.filter(mId => mId !== data.userId);
-                saveDB();
-                
-                pushChatsToParticipants(data.userId);
-                leaveChat.members.forEach(mId => pushChatsToParticipants(mId));
-            }
-            break;
-
-        // ПОЛНОЕ УДАЛЕНИЕ ЧАТА ИЛИ ГРУППЫ
-        case 'delete_chat':
-            const chatIndex = db.chats.findIndex(c => c.id === data.chatId);
-            if (chatIndex !== -1) {
-                const affectedMembers = db.chats[chatIndex].members;
-                db.chats.splice(chatIndex, 1);
-                saveDB();
-                
-                // Рассылаем пустоту/обновление всем, кто там состоял
-                affectedMembers.forEach(mId => pushChatsToParticipants(mId));
-            }
-            break;
+            saveUsers(users);
+            loginSuccess(user);
+        }
     }
 }
 
-// ФУНКЦИЯ ФОРМИРОВАНИЯ И ОТПРАВКИ СПИСКА ЧАТОВ КОНКРЕТНОМУ ПОЛЬЗОВАТЕЛЮ
-function pushChatsToParticipants(userId) {
-    // Ищем все веб-сокет соединения этого пользователя
-    const userSockets = [];
-    activeConnections.forEach((id, ws) => {
-        if (id === userId && ws.readyState === WebSocket.OPEN) {
-            userSockets.push(ws);
-        }
+function loginSuccess(user) {
+    currentUser = user;
+    localStorage.setItem('ink_current_session', JSON.stringify(user));
+    document.getElementById('auth-screen').classList.add('hidden');
+    document.getElementById('app-screen').classList.remove('hidden');
+    renderChatsList();
+}
+
+// ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ
+function setupProfileEvents() {
+    document.getElementById('profile-menu-btn').addEventListener('click', () => {
+        document.getElementById('prof-id').innerText = currentUser.id;
+        document.getElementById('prof-date').innerText = currentUser.createdAt || 'Неизвестно';
+        document.getElementById('prof-name').value = currentUser.username;
+        document.getElementById('prof-pass').value = currentUser.password;
+        toggleModal('modal-profile', true);
     });
 
-    if (userSockets.length === 0) return; // Пользователь не в сети
+    document.getElementById('close-profile-btn').addEventListener('click', () => toggleModal('modal-profile', false));
 
-    // Фильтруем чаты, где этот пользователь состоит
-    const userChats = db.chats.filter(chat => chat.members.includes(userId));
+    document.getElementById('save-profile-btn').addEventListener('click', () => {
+        let users = getUsers();
+        const u = users.find(user => user.id === currentUser.id);
+        u.username = document.getElementById('prof-name').value.trim();
+        u.password = document.getElementById('prof-pass').value.trim();
+        saveUsers(users);
+        currentUser = u;
+        localStorage.setItem('ink_current_session', JSON.stringify(u));
+        toggleModal('modal-profile', false);
+        alert('Профиль изменен!');
+        if (currentChatId) selectChat();
+    });
 
-    // Для каждого чата подтягиваем безопасную информацию об участниках (имя, ID, статус сети)
-    const enrichedChats = userChats.map(chat => {
-        const memberDetails = chat.members.map(mId => {
-            const u = db.users.find(user => user.id === mId);
-            return u ? { id: u.id, username: u.username, isOnline: u.isOnline } : { id: mId, username: 'Удален', isOnline: false };
+    document.getElementById('delete-acc-btn').addEventListener('click', () => {
+        if (!confirm('Удалить аккаунт НАВСЕГДА? Все ваши переписки исчезнут.')) return;
+        let users = getUsers().filter(u => u.id !== currentUser.id);
+        saveUsers(users);
+        
+        let chats = getChats().filter(c => !c.members.includes(currentUser.id));
+        saveChats(chats);
+
+        localStorage.removeItem('ink_current_session');
+        window.location.reload();
+    });
+}
+// ПОИСК И ДОБАВЛЕНИЕ КОНТАКТОВ ПО ID
+document.getElementById('search-input').addEventListener('input', (e) => {
+    const query = e.target.value.trim();
+    const addBtn = document.getElementById('add-chat-btn');
+    
+    // Если введено 5 цифр и это не собственный ID пользователя
+    if (/^\d{5}$/.test(query) && query !== currentUser.id) {
+        addBtn.classList.remove('hidden');
+    } else {
+        addBtn.classList.add('hidden');
+    }
+});
+
+document.getElementById('add-chat-btn').addEventListener('click', () => {
+    const targetId = document.getElementById('search-input').value.trim();
+    let users = getUsers();
+    const targetUser = users.find(u => u.id === targetId);
+    
+    if (!targetUser) return alert('Пользователь с таким ID не найден!');
+
+    let chats = getChats();
+    // Проверяем, существует ли уже диалог между пользователями
+    const exists = chats.find(c => c.members.includes(currentUser.id) && c.members.includes(targetId));
+    
+    if (!exists) {
+        chats.push({
+            id: Date.now().toString(),
+            members: [currentUser.id, targetId],
+            messages: []
         });
+        saveChats(chats);
+    }
 
-        return {
-            ...chat,
-            memberDetails: memberDetails
-        };
-    });
+    document.getElementById('search-input').value = '';
+    document.getElementById('add-chat-btn').classList.add('hidden');
+    renderChatsList();
+});
 
-    // Отправляем данные во все вкладки пользователя
-    userSockets.forEach(ws => {
-        ws.send(JSON.stringify({
-            type: 'chats_update',
-            chats: enrichedChats
-        }));
-    });
-}
+// РЕНДЕРИНГ СПИСКА ДИАЛОГОВ (СЛЕВА)
+function renderChatsList() {
+    const container = document.getElementById('chats-list');
+    container.innerHTML = '';
+    
+    let chats = getChats().filter(c => c.members.includes(currentUser.id));
+    let users = getUsers();
 
-// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ УСПЕШНОЙ АВТОРИЗАЦИИ И СМЕНЫ СТАТУСА
-function sendAuthSuccess(ws, user) {
-    const userChats = db.chats.filter(chat => chat.members.includes(user.id));
-    const enrichedChats = userChats.map(chat => {
-        const memberDetails = chat.members.map(mId => {
-            const u = db.users.find(user => user.id === mId);
-            return u ? { id: u.id, username: u.username, isOnline: u.isOnline } : { id: mId, username: 'Удален', isOnline: false };
+    if (chats.length === 0) {
+        container.innerHTML = '<div style="padding:15px; color:var(--text-muted); text-align:center;">Нет активных диалогов</div>';
+        return;
+    }
+
+    chats.forEach(chat => {
+        const partnerId = chat.members.find(m => m !== currentUser.id);
+        const partner = users.find(u => u.id === partnerId);
+        
+        const title = partner ? partner.username : 'Удаленный аккаунт';
+        const sub = `ID: ${partnerId}`;
+        const statusClass = partner && partner.isOnline ? 'online' : 'offline';
+        const statusDot = `<span class="status-badge ${statusClass}"></span>`;
+
+        const lastMsg = chat.messages.length > 0 ? chat.messages[chat.messages.length - 1].text : 'Нет сообщений';
+        const item = document.createElement('div');
+        item.className = `chat-item ${chat.id === currentChatId ? 'active' : ''}`;
+        
+        item.innerHTML = `
+            <div class="chat-avatar">${title.charAt(0).toUpperCase()}${statusDot}</div>
+            <div class="chat-item-details">
+                <div class="chat-item-top">
+                    <span class="chat-item-name">${title}</span>
+                    <span class="chat-item-id">${sub}</span>
+                </div>
+                <div class="chat-item-last">${lastMsg}</div>
+            </div>
+        `;
+        
+        item.addEventListener('click', () => {
+            currentChatId = chat.id;
+            selectChat();
         });
-        return { ...chat, memberDetails };
-    });
-
-    ws.send(JSON.stringify({
-        type: 'auth_success',
-        user: { id: user.id, username: user.username, password: user.password, createdAt: user.createdAt },
-        chats: enrichedChats
-    }));
-}
-
-function broadcastStatusChange(userId) {
-    activeConnections.forEach((id, ws) => {
-        if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'user_status_change', userId: userId }));
-        }
+        container.appendChild(item);
     });
 }
+
+function selectChat() {
+    document.getElementById('no-chat-selected').classList.add('hidden');
+    document.getElementById('active-chat-container').classList.remove('hidden');
+    renderChatsList();
+    renderChatHeader();
+    renderMessages();
+}
+
+// ОБНОВЛЕНИЕ ШАПКИ АКТИВНОГО ЧАТА
+function renderChatHeader() {
+    const chat = getChats().find(c => c.id === currentChatId);
+    let users = getUsers();
+    const info = document.getElementById('chat-header-info');
+    
+    const partnerId = chat.members.find(m => m !== currentUser.id);
+    const partner = users.find(u => u.id === partnerId);
+    
+    const statusText = partner && partner.isOnline ? 'в сети' : 'не в сети';
+    info.innerHTML = `<h4>${partner ? partner.username : 'Чат'}</h4><span class="header-status">${statusText}</span>`;
+}
+
+// ОТОБРАЖЕНИЕ ЛЕНТЫ СООБЩЕНИЙ
+function renderMessages() {
+    const chat = getChats().find(c => c.id === currentChatId);
+    const display = document.getElementById('messages-display');
+    display.innerHTML = '';
+
+    chat.messages.forEach(msg => {
+        const isMyMsg = msg.senderId === currentUser.id;
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `message ${isMyMsg ? 'outgoing' : 'incoming'}`;
+
+        msgDiv.innerHTML = `
+            <div class="msg-text">${msg.text}</div>
+            <div class="msg-meta">
+                <span>${msg.time}</span>
+                ${msg.edited ? '<span>(изм.)</span>' : ''}
+            </div>
+            ${isMyMsg ? `
+                <div class="msg-actions">
+                    <button onclick="editMessage('${msg.id}', '${msg.text}')"><i class="fas fa-edit"></i></button>
+                    <button onclick="deleteMessage('${msg.id}')"><i class="fas fa-trash"></i></button>
+                </div>
+            ` : ''}
+        `;
+        display.appendChild(msgDiv);
+    });
+    display.scrollTop = display.scrollHeight;
+}
+
+// ОТПРАВКА СООБЩЕНИЙ
+function sendMessage() {
+    const input = document.getElementById('message-input');
+    const text = input.value.trim();
+    if (!text) return;
+
+    let chats = getChats();
+    const chat = chats.find(c => c.id === currentChatId);
+    
+    chat.messages.push({
+        id: Date.now().toString(),
+        senderId: currentUser.id,
+        text: text,
+        time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+        edited: false
+    });
+    
+    saveChats(chats);
+    input.value = '';
+    selectChat();
+}
+
+document.getElementById('send-msg-btn').addEventListener('click', sendMessage);
+document.getElementById('message-input').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') sendMessage();
+});
+
+// ИСПРАВЛЕНИЕ И УДАЛЕНИЕ СООБЩЕНИЙ
+function editMessage(msgId, oldText) {
+    const newText = prompt("Редактировать сообщение:", oldText);
+    if (newText === null || newText.trim() === '') return;
+    
+    let chats = getChats();
+    const msg = chats.find(c => c.id === currentChatId).messages.find(m => m.id === msgId);
+    msg.text = newText.trim();
+    msg.edited = true;
+    
+    saveChats(chats);
+    selectChat();
+}
+
+function deleteMessage(msgId) {
+    if (!confirm("Удалить это сообщение?")) return;
+    
+    let chats = getChats();
+    const chat = chats.find(c => c.id === currentChatId);
+    chat.messages = chat.messages.filter(m => m.id !== msgId);
+    
+    saveChats(chats);
+    selectChat();
+}
+
+// УДАЛЕНИЕ ДРУГА И ДИАЛОГА
+document.getElementById('delete-friend-btn').addEventListener('click', () => {
+    if (!confirm("Удалить этого друга из контактов? Вся история сообщений сотрется навсегда.")) return;
+    
+    let chats = getChats();
+    chats = chats.filter(c => c.id !== currentChatId);
+    saveChats(chats);
+    
+    currentChatId = null;
+    document.getElementById('active-chat-container').classList.add('hidden');
+    document.getElementById('no-chat-selected').classList.remove('hidden');
+    renderChatsList();
+});
