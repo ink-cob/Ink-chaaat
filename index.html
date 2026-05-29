@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Ink</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cloudflare.com">
+</head>
+<body class="dark-theme"> <!-- По умолчанию темная тема Telegram -->
+
+    <!-- ОКНО АВТОРИЗАЦИИ / РЕГИСТРАЦИИ -->
+    <div id="auth-screen" class="auth-container">
+        <div class="auth-card">
+            <div class="logo">Ink Chat</div>
+            <h2 id="auth-title">Вход</h2>
+            
+            <div class="input-group">
+                <input type="text" id="auth-username" placeholder="Имя пользователя" required>
+            </div>
+            <div class="input-group">
+                <input type="password" id="auth-password" placeholder="Пароль" required>
+            </div>
+            <div class="input-group hidden" id="reg-id-field">
+                <input type="text" id="generated-id" placeholder="Ваш ID (создается автоматически)" readonly>
+            </div>
+
+            <button id="auth-submit-btn" class="btn-main">Войти</button>
+            <p class="auth-toggle">Нет аккаунта? <span id="toggle-auth-mode">Зарегистрироваться</span></p>
+        </div>
+    </div>
+
+    <!-- ГЛАВНОЕ ОКНО МЕССЕНДЖЕРА -->
+    <div id="app-screen" class="app-container hidden">
+        
+        <!-- Левая панель: Списки и поиск -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="menu-icon" id="profile-menu-btn">
+                    <i class="fas fa-bars"></i>
+                </div>
+                <div class="search-bar">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="search-input" placeholder="Поиск по ID (5 знаков)...">
+                    <button id="add-chat-btn" class="hidden"><i class="fas fa-plus"></i></button>
+                </div>
+            </div>
+
+            <!-- Список чатов (Личные и Группы) -->
+            <div class="chats-list" id="chats-list">
+                <!-- Сюда JS рендерит диалоги -->
+            </div>
+        </aside>
+
+        <!-- Правая панель: Окно чата -->
+        <main class="chat-window">
+            <!-- Экран, если чат не выбран -->
+            <div id="no-chat-selected" class="no-chat">
+                <span>Выберите, кому хотели бы написать</span>
+            </div>
+
+            <!-- Активный чат -->
+            <div id="active-chat-container" class="chat-container hidden">
+                <div class="chat-header">
+                    <div class="chat-info" id="chat-header-info">
+                        <!-- Название чата и статус (В сети / участников) -->
+                    </div>
+                    <div class="header-actions">
+                        <button id="group-manage-btn" class="btn-icon hidden"><i class="fas fa-users-cog"></i></button>
+                        <button id="theme-toggle" class="btn-icon"><i class="fas fa-moon"></i></button>
+                    </div>
+                </div>
+
+                <!-- Лента сообщений -->
+                <div class="messages-display" id="messages-display">
+                    <!-- Сообщения -->
+                </div>
+
+                <!-- Панель ввода сообщения -->
+                <div class="chat-input-area">
+                    <input type="text" id="message-input" placeholder="Напишите сообщение...">
+                    <button id="send-msg-btn" class="btn-send"><i class="fas fa-paper-plane"></i></button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО: ПРОФИЛЬ -->
+    <div id="modal-profile" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Ваш профиль</h3>
+                <span class="close-modal" onclick="toggleModal('modal-profile', false)">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p><strong>ID:</strong> <span id="prof-id"></span></p>
+                <p><strong>Дата регистрации:</strong> <span id="prof-date"></span></p>
+                <div class="input-group">
+                    <label>Имя:</label>
+                    <input type="text" id="prof-name">
+                </div>
+                <div class="input-group">
+                    <label>Новый пароль:</label>
+                    <input type="password" id="prof-pass">
+                </div>
+                <button id="save-profile-btn" class="btn-main">Сохранить изменения</button>
+                <hr>
+                <button id="delete-acc-btn" class="btn-danger">Удалить аккаунт навсегда</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО: УПРАВЛЕНИЕ ГРУППОЙ -->
+    <div id="modal-group" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Управление чатом</h3>
+                <span class="close-modal" onclick="toggleModal('modal-group', false)">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="group-admin-options" class="hidden">
+                    <div class="input-group">
+                        <label>Переименовать группу:</label>
+                        <input type="text" id="group-new-name">
+                    </div>
+                    <div class="input-group">
+                        <label>Добавить участника (Введи 5-значный ID):</label>
+                        <input type="text" id="group-add-user-id" placeholder="Например: 54321">
+                        <button id="btn-group-add-user" class="btn-sub">Добавить</button>
+                    </div>
+                    <button id="btn-group-update" class="btn-main">Применить изменения</button>
+                </div>
+                
+                <h4>Участники:</h4>
+                <div id="group-members-list" class="members-list"></div>
+
+                <button id="leave-group-btn" class="btn-danger">Выйти из чата</button>
+                <button id="delete-group-btn" class="btn-danger hidden">Удалить группу</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="client.js"></script>
+</body>
+</html>
